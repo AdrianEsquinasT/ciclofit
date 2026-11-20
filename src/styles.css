@@ -60,3 +60,30 @@ input { background: var(--bg); color: var(--text); border: 1px solid var(--line)
 .tabs button.active { background: #ffffff14; color: var(--text); }
 .tabs button:disabled { opacity: .4; }
 @media (min-width: 720px) { .app { padding-top: 32px; } }
+select { background: var(--bg); color: var(--text); border: 1px solid var(--line); border-radius: 12px; padding: 12px; font-size: 17px; width: 100%; }
+.check { display: flex; gap: 10px; align-items: center; font-size: 14px; margin: 10px 0; }
+.check input { width: 20px; height: 20px; }
+.chips { display: flex; gap: 8px; overflow-x: auto; padding-bottom: 2px; }
+.chip { flex: none; border: 1px solid var(--line); background: var(--card); color: var(--text); border-radius: 999px; padding: 8px 14px; font-size: 14px; font-weight: 600; }
+.chip.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.chip.up { margin-top: 10px; background: #4ade8022; border-color: #4ade80; color: #bbf7d0; border-radius: 12px; width: 100%; text-align: left; }
+.banner-top { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.big { font-size: 34px; font-weight: 800; }
+.seg.mini { width: 160px; }
+.seg.mini button { padding: 8px; font-size: 14px; }
+.ex-top { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.ex-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 8px; }
+.today { background: #ffffff0d; border-radius: 12px; padding: 8px 10px; }
+.today-v { font-weight: 700; font-size: 17px; }
+.link { background: none; border: 0; color: var(--muted); font-size: 14px; text-decoration: underline; padding: 6px; }
+.link.danger { color: #ff8a8a; align-self: center; }
+.two { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.row-btns { display: flex; gap: 10px; }
+.row-btns .primary { flex: 2; }
+.ghost { flex: 1; border: 1px solid var(--line); background: transparent; color: var(--text); border-radius: 14px; font-size: 16px; }
+.pat { display: flex; align-items: center; gap: 8px; margin: 8px 0; }
+.pat-n { width: 108px; font-size: 14px; }
+.bar { flex: 1; height: 8px; background: #ffffff14; border-radius: 6px; overflow: hidden; }
+.bar div { height: 100%; }
+.src a { color: #9ec5ff; }
+.tabs button { padding: 12px 4px; font-size: 14px; }

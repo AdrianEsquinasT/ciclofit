@@ -4,6 +4,8 @@ export interface CycleSettings {
   lastPeriodStart: string; // YYYY-MM-DD (primer día de sangrado)
   cycleLength: number; // 21-40
   periodLength: number; // 2-8
+  sensitivity?: 0 | 1 | 2; // 0 = ignorar fase, 1 = estándar, 2 = alta
+  hormonal?: boolean; // anticonceptivo hormonal: sin patrón de fases
 }
 
 export interface PhaseRange {

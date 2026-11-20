@@ -1,12 +1,12 @@
-import { PhaseId } from './cycle';
+import { CycleSettings, PhaseId } from './cycle';
 
 export type Mode = 'strength' | 'hyrox';
-export type Feeling = 'great' | 'ok' | 'bad';
+export type Feeling = 'great' | 'ok' | 'low' | 'bad';
 
 export interface ModeGuide {
-  base: number; // % del rendimiento pico
-  firstDays?: number; // ajuste (pts) en los 2 primeros días de la fase
-  lastDays?: number; // ajuste (pts) en los 2 últimos días de la fase
+  prior: number; // puntos porcentuales respecto al pico (≤ 0): "prior" poblacional, pequeño
+  firstDays?: number; // ajuste extra los 2 primeros días de la fase
+  heat?: number; // ajuste extra si hace calor/humedad (solo Hyrox, fase lútea)
   load: string;
   volume: string;
   effort: string;
@@ -26,44 +26,45 @@ export interface PhaseInfo {
 }
 
 export const MODE_LABEL: Record<Mode, string> = { strength: 'Pesas', hyrox: 'Hyrox' };
-export const FEELING_LABEL: Record<Feeling, string> = { great: 'Genial', ok: 'Normal', bad: 'Floja' };
-export const FEELING_DELTA: Record<Feeling, number> = { great: 3, ok: 0, bad: -7 };
+export const FEELING_LABEL: Record<Feeling, string> = { great: 'Genial', ok: 'Normal', low: 'Floja', bad: 'Mal' };
+export const FEELING_DELTA: Record<Feeling, number> = { great: 0, ok: 0, low: -5, bad: -10 };
+export const FEELING_SCORE: Record<Feeling, number> = { great: 3, ok: 2, low: 1, bad: 0 };
+
+export const SENS_LABEL = ['Ignorar fase', 'Estándar', 'Alta'];
 
 export const PHASES: Record<PhaseId, PhaseInfo> = {
   menstrual: {
     id: 'menstrual',
     name: 'Menstrual',
     color: '#ff5d6c',
-    hormones: 'Estrógeno y progesterona en su punto más bajo.',
+    hormones: 'Estrógeno y progesterona bajos.',
     why:
-      'Con las hormonas bajas, el cuerpo tiene menos “empuje” y la percepción del esfuerzo suele subir. Los primeros 1–2 días se suman cólicos (prostaglandinas), posible pérdida de hierro y peor sueño. Tu capacidad real de fuerza se mantiene en gran parte: lo que cae sobre todo es cómo se siente el esfuerzo.',
+      'El metaanálisis más completo (McNulty 2020, 78 estudios) encuentra que el rendimiento podría ser algo menor en la fase folicular temprana, pero el efecto es trivial (≈ −0,06 desviaciones estándar), con evidencia de baja calidad y mucha variación entre mujeres. Lo más consistente son los síntomas: en encuestas, ≈86% refiere cansancio y ≈84% calambres, y a más síntomas, más caída de rendimiento percibida. Por eso el descuento por fase es pequeño y el peso lo lleva cómo se siente hoy.',
     watch: 'Dolor intenso, sangrado muy abundante o mareos: baja el ritmo y consúltalo con un profesional.',
     modes: {
       strength: {
-        base: 90, firstDays: -3, lastDays: +3,
-        load: 'Cargas al 87–93% de tus pesos pico. Mismas barras, un pelín menos peso.',
-        volume: 'Mantén los ejercicios principales; quita 1 serie en los accesorios los días 1–2.',
-        effort: 'RPE 7–8: terminas cada serie con 2–3 repeticiones en reserva.',
-        rest: 'Añade 30–60 s de descanso si lo necesitas.',
+        prior: -2, firstDays: -3,
+        load: 'Casi las mismas cargas. Solo si ves que la barra va lenta o hay molestias, baja un escalón.',
+        volume: 'Mantén el plan; si hay dolor, quita una serie de accesorios.',
+        effort: 'Deja 2–3 repeticiones en reserva (RIR) en vez de ir cerca del fallo.',
+        rest: 'Descansos algo más largos si los necesitas.',
         tips: [
-          'Prioriza técnica y control del tempo: es buen momento para series lentas y pausadas.',
-          'Si hay molestia de cólicos, cambia sentadilla/peso muerto pesados por prensa, hip thrust o unilaterales.',
-          'Movilidad y calor local antes de empezar suelen ayudar con las molestias.',
+          'Si hay cólicos, sustituye variantes pesadas de bisagra/sentadilla por prensa, hip thrust o unilaterales.',
+          'Calor local y movilidad antes de empezar suelen ayudar con las molestias.',
         ],
-        mindset: 'Hoy mantienes la adaptación. Una sesión al 90% bien hecha no te hace retroceder.',
+        mindset: 'Que hoy cueste más no significa que pierdas nivel: mantener la rutina ya cuenta.',
       },
       hyrox: {
-        base: 88, firstDays: -3, lastDays: +3,
-        load: 'Trineo, farmers y wall balls con el peso de siempre solo si va fluido; si no, baja 1 escalón.',
-        volume: 'Reduce un 10–20% el volumen total del WOD (menos rondas o menos metros).',
-        effort: 'Guíate por RPE/pulsaciones, no por ritmo: ritmos un 8–12% más lentos de tu pico.',
-        rest: 'Transiciones algo más largas; no busques récords en estaciones.',
+        prior: -2, firstDays: -3,
+        load: 'Pesos de estaciones iguales si se mueven fluidos; si no, baja un escalón.',
+        volume: 'Algo menos de volumen si hay molestias o mucho cansancio.',
+        effort: 'Guíate por sensaciones/pulsaciones; no persigas ritmos exactos.',
+        rest: 'Transiciones algo más largas.',
         tips: [
-          'Z2 continua y técnica de estaciones (SkiErg, remo) rinden mucho y desgastan poco.',
-          'Hidratación y sales; si sangrado abundante, cuida el hierro (consúltalo con un médico).',
-          'Evita series máximas de burpee broad jumps los días 1–2 si hay dolor abdominal.',
+          'Z2 continua y técnica de estaciones rinden bien con poco desgaste.',
+          'Con dolor abdominal, evita series máximas de burpee broad jumps los días 1–2.',
         ],
-        mindset: 'Hoy el objetivo es acumular calidad, no batir marcas. Constancia > un día heroico.',
+        mindset: 'Hoy suma calidad, no marcas. Constancia > día heroico.',
       },
     },
   },
@@ -71,34 +72,28 @@ export const PHASES: Record<PhaseId, PhaseInfo> = {
     id: 'follicular',
     name: 'Folicular',
     color: '#ffb340',
-    hormones: 'El estrógeno sube de forma sostenida; progesterona baja.',
+    hormones: 'El estrógeno sube; progesterona baja.',
     why:
-      'El estrógeno ayuda a la recuperación, la tolerancia al esfuerzo y la sensación de energía. Suele ser la fase en la que mejor se rinde y se tolera el volumen, aunque hay mucha variación individual.',
-    watch: 'Aprovecha, pero sin tirar el calentamiento: entrenar “genial” no es excusa para saltarse la progresión.',
+      'En el metaanálisis, la fase folicular tardía y las siguientes no se distinguen entre sí en rendimiento. Muchas mujeres refieren más energía y mejor ánimo, así que es un buen sitio para intentar progresar, pero no hay evidencia sólida de que entrenar “sincronizada” produzca más fuerza o músculo (Colenso-Semple 2023: concluye que es prematuro afirmarlo).',
+    watch: 'Aprovecha para progresar, sin saltarte el calentamiento.',
     modes: {
       strength: {
-        base: 100,
-        load: 'Cargas al 97–100%: buen momento para intentar subir peso o buscar récords personales.',
-        volume: 'Volumen completo; tolera bien series extra y trabajo cerca del fallo.',
-        effort: 'RPE 8–9 en principales, 1–2 repeticiones en reserva.',
-        rest: 'Descansos normales (2–3 min en básicos).',
-        tips: [
-          'Ideal para tests de fuerza, series pesadas y nuevos bloques de progresión.',
-          'Aprovecha para trabajar velocidad de barra y ejercicios técnicos.',
-        ],
-        mindset: 'Día de empujar. Apunta a superarte, siempre con técnica limpia.',
+        prior: 0,
+        load: 'Cargas completas. Buen momento para intentar subir peso o repeticiones.',
+        volume: 'Volumen completo.',
+        effort: '1–2 repeticiones en reserva en básicos.',
+        rest: 'Descansos normales.',
+        tips: ['Ideal para tests, series pesadas y nuevos bloques de progresión.'],
+        mindset: 'Día de empujar: apunta a superarte con técnica limpia.',
       },
       hyrox: {
-        base: 100,
-        load: 'Pesos oficiales o de competición en trineo, farmers y wall balls.',
-        volume: 'Volumen completo; buen momento para simulacros y sesiones de umbral.',
-        effort: 'RPE 8–9; intervalos duros y trabajo a ritmo de carrera.',
-        rest: 'Descansos según plan.',
-        tips: [
-          'Haz aquí tus simulacros largos o tests de 1 km / estaciones.',
-          'Buen momento para intervalos de umbral y VO2.',
-        ],
-        mindset: 'Tu ventana para marcas. Compara con tus mejores días, no con los de otras fases.',
+        prior: 0,
+        load: 'Pesos de competición.',
+        volume: 'Volumen completo; buen día para simulacros o umbral.',
+        effort: 'Intervalos duros a ritmo objetivo.',
+        rest: 'Según plan.',
+        tips: ['Haz aquí tus tests de 1 km o estaciones.'],
+        mindset: 'Tu ventana para marcas personales.',
       },
     },
   },
@@ -108,31 +103,25 @@ export const PHASES: Record<PhaseId, PhaseInfo> = {
     color: '#4ade80',
     hormones: 'Pico de estrógeno y subida de LH.',
     why:
-      'Rendimiento generalmente alto. Algunos estudios sugieren mayor laxitud de ligamentos alrededor de la ovulación; la evidencia es mixta, pero invita a ser cuidadosa en acciones explosivas y cambios de dirección.',
-    watch: 'Calentamiento algo más largo y control en saltos, aterrizajes y cargas muy pesadas con mal tempo.',
+      'Sin penalización de rendimiento demostrada. Un metaanálisis (2017) halló mayor laxitud de rodilla en la ovulación frente a la fase folicular, pero la relación con lesiones de LCA no está demostrada: una revisión de 2022 concluye que es inconcluyente. Por prudencia, calentamiento algo más largo y control en saltos y cambios de dirección.',
+    watch: 'Cuida rodillas en aterrizajes, saltos y giros bruscos.',
     modes: {
       strength: {
-        base: 98,
-        load: 'Cargas al 95–100%. Muy buen día para pesados, con técnica estricta.',
+        prior: 0,
+        load: 'Cargas completas con técnica estricta.',
         volume: 'Volumen completo.',
-        effort: 'RPE 8–9; no hace falta ir al fallo.',
+        effort: '1–2 repeticiones en reserva.',
         rest: 'Descansos normales.',
-        tips: [
-          'Calentamiento progresivo y activación de glúteo/core antes de sentadilla y peso muerto.',
-          'Cuida rodillas en aterrizajes de pliometría y saltos.',
-        ],
-        mindset: 'Estás fuerte, pero no corras: calidad de movimiento primero.',
+        tips: ['Activación de glúteo/core antes de sentadilla y peso muerto.', 'Aterrizajes controlados en pliometría.'],
+        mindset: 'Estás fuerte; calidad de movimiento primero.',
       },
       hyrox: {
-        base: 97,
-        load: 'Pesos de competición, sí; con buen calentamiento de rodillas y cadera.',
-        volume: 'Volumen completo, vigilando el calor.',
-        effort: 'RPE 8–9; ritmos al 95–100% de tu pico.',
+        prior: 0,
+        load: 'Pesos de competición con buen calentamiento de rodillas y cadera.',
+        volume: 'Volumen completo.',
+        effort: 'Ritmo objetivo.',
         rest: 'Descansos normales.',
-        tips: [
-          'Atención en burpee broad jumps, lunges con saco y wall balls: control de rodillas.',
-          'Hidratación reforzada si hace calor: la temperatura corporal empieza a subir.',
-        ],
+        tips: ['Control de rodillas en burpee broad jumps, lunges y wall balls.'],
         mindset: 'Buen día para rendir, con cabeza en las articulaciones.',
       },
     },
@@ -141,34 +130,28 @@ export const PHASES: Record<PhaseId, PhaseInfo> = {
     id: 'earlyLuteal',
     name: 'Lútea inicial',
     color: '#38bdf8',
-    hormones: 'La progesterona sube; el estrógeno baja y vuelve a subir.',
+    hormones: 'La progesterona sube.',
     why:
-      'La progesterona eleva la temperatura corporal basal (≈0,3–0,5 °C) y puede aumentar ligeramente pulsaciones y sensación de esfuerzo, sobre todo con calor. La fuerza se mantiene, pero el trabajo aeróbico intenso cuesta un poco más.',
-    watch: 'Mayor sudoración y fatiga: hidratación y carbohidratos suficientes.',
+      'La progesterona eleva la temperatura central ≈0,3–0,5 °C. En ambiente templado no se observa diferencia de rendimiento; en calor y humedad, un estudio (Janse de Jonge 2012) halló menor tiempo hasta el agotamiento y más pulsaciones y esfuerzo percibido en la fase lútea, aunque otros estudios más recientes no lo replican. Para pesas casi no hay efecto.',
+    watch: 'Más sudor y fatiga con calor: hidratación y carbohidratos suficientes.',
     modes: {
       strength: {
-        base: 96,
-        load: 'Cargas al 93–98%. Casi todo se mantiene.',
-        volume: 'Volumen completo; recuperas algo más lento, vigila el volumen acumulado semanal.',
-        effort: 'RPE 8, con 2 repeticiones en reserva.',
-        rest: 'Descansos normales o +15–30 s.',
-        tips: [
-          'Buena fase para acumular volumen y trabajo de hipertrofia.',
-          'Evita acumular muchas series al fallo seguidas.',
-        ],
-        mindset: 'Casi a tope: si el último día no sale, no es pérdida de nivel, es fase.',
+        prior: 0,
+        load: 'Cargas completas.',
+        volume: 'Volumen completo; vigila la recuperación semanal.',
+        effort: 'Unas 2 repeticiones en reserva.',
+        rest: 'Descansos normales.',
+        tips: ['Buena fase para acumular volumen de hipertrofia.'],
+        mindset: 'Casi sin cambios: si un día no sale, no es pérdida de nivel.',
       },
       hyrox: {
-        base: 94,
-        load: 'Pesos de siempre; si el calor aprieta, baja un escalón en trineo.',
-        volume: 'Volumen completo, o −10% si la sesión es muy larga.',
-        effort: 'RPE 8 máx.; con pulsaciones 3–5 lpm más altas a igual ritmo, no te frustres.',
-        rest: 'Más tiempo de recuperación entre bloques.',
-        tips: [
-          'Guíate por RPE o zona cardíaca, no solo por ritmo.',
-          'Hidratación con electrolitos; entrena fresquita (ventilación, horas frescas).',
-        ],
-        mindset: 'Mismo esfuerzo, ritmos ~5% más lentos: es termorregulación, no nivel.',
+        prior: -1, heat: -3,
+        load: 'Pesos habituales; si hace calor, baja un escalón en trineo.',
+        volume: 'Volumen completo, o algo menos si la sesión es muy larga.',
+        effort: 'Guíate por RPE o zona cardíaca; a igual ritmo, las pulsaciones pueden ser algo mayores.',
+        rest: 'Más recuperación entre bloques con calor.',
+        tips: ['Hidratación con electrolitos y horas frescas si es posible.'],
+        mindset: 'Mismo esfuerzo con ritmo algo más lento puede ser solo termorregulación.',
       },
     },
   },
@@ -178,32 +161,29 @@ export const PHASES: Record<PhaseId, PhaseInfo> = {
     color: '#a78bfa',
     hormones: 'Progesterona y estrógeno caen antes de la regla.',
     why:
-      'Es cuando más aparecen síntomas premenstruales: fatiga, peor sueño, retención de líquidos, irritabilidad y sensación de esfuerzo aumentada. La temperatura sigue elevada. El rendimiento puede bajar y variar mucho de un día a otro.',
-    watch: 'Sueño y estrés cuentan mucho ahora. Escucha el cuerpo más que el plan.',
+      'Es cuando más se reportan síntomas premenstruales (en encuestas, ≈91% mencionan cambios de ánimo/ansiedad y ≈86% cansancio). El rendimiento medido no cae de forma fiable, pero la percepción de esfuerzo y el sueño sí pueden empeorar. Se aplica un descuento pequeño y que el día a día lo decida cómo te sientes.',
+    watch: 'Sueño y estrés pesan mucho ahora: escucha más al cuerpo que al plan.',
     modes: {
       strength: {
-        base: 91, lastDays: -3,
-        load: 'Cargas al 88–94%. Si un día va mal, baja otro 5% sin culpa.',
-        volume: 'Reduce 1 serie en accesorios; mantén los básicos.',
-        effort: 'RPE 7–8, 2–3 repeticiones en reserva.',
-        rest: 'Descansos un poco más largos.',
+        prior: -2,
+        load: 'Casi las mismas cargas; baja un escalón si el día va mal.',
+        volume: 'Mantén los básicos; recorta accesorios si hace falta.',
+        effort: '2–3 repeticiones en reserva.',
+        rest: 'Un poco más de descanso.',
         tips: [
-          'Prioriza la técnica y la ejecución controlada; es buena fase para hipertrofia ligera.',
-          'Come suficiente carbohidratos y proteína; la retención de líquidos puede subir el peso en la báscula (es normal).',
+          'La retención de líquidos puede subir el peso en la báscula: es normal y temporal.',
+          'Come suficientes carbohidratos y proteína.',
         ],
-        mindset: 'El peso en la barra hoy no mide tu progreso real. Lo mide el mes completo.',
+        mindset: 'El peso de hoy no mide tu progreso real; lo mide el mes completo.',
       },
       hyrox: {
-        base: 88, lastDays: -3,
-        load: 'Pesos de trineo y farmers un escalón por debajo si no se mueven fluidos.',
-        volume: 'Reduce 10–20% el volumen; sesiones más cortas e intensas, mejor que largas.',
-        effort: 'RPE 7–8; ritmos 8–12% más lentos de tu pico.',
+        prior: -3, heat: -3,
+        load: 'Un escalón menos en trineo/farmers si no se mueven fluidos.',
+        volume: 'Sesiones algo más cortas e intensas, mejor que largas.',
+        effort: 'RPE 7–8; ritmos algo más lentos si hace calor.',
         rest: 'Más descanso entre bloques.',
-        tips: [
-          'Mejor sesiones de calidad cortas que simulacros largos.',
-          'Cuida sueño e hidratación; evita entrenar con mucho calor.',
-        ],
-        mindset: 'Terminar la sesión en vez de “ganarla”: eso ya es progreso.',
+        tips: ['Cuida sueño e hidratación; evita entrenar con mucho calor.'],
+        mindset: 'Terminar la sesión ya es progreso.',
       },
     },
   },
@@ -211,22 +191,25 @@ export const PHASES: Record<PhaseId, PhaseInfo> = {
 
 export interface Intensity {
   point: number;
-  min: number;
-  max: number;
+  phasePart: number; // puntos aportados por fase (+calor)
+  feelPart: number; // puntos aportados por sensación
 }
 
 export function intensity(
+  s: CycleSettings,
   phaseId: PhaseId,
   mode: Mode,
   dayInPhase: number,
-  daysLeft: number,
   feeling: Feeling,
+  hot: boolean,
 ): Intensity {
   const g = PHASES[phaseId].modes[mode];
-  let v = g.base;
-  if (dayInPhase <= 2 && g.firstDays) v += g.firstDays;
-  if (daysLeft <= 2 && g.lastDays) v += g.lastDays;
-  v += FEELING_DELTA[feeling];
-  v = Math.max(70, Math.min(100, v));
-  return { point: Math.round(v), min: Math.max(0, Math.round(v) - 3), max: Math.min(100, Math.round(v) + 2) };
+  const sens = s.hormonal ? 0 : s.sensitivity ?? 1;
+  let prior = g.prior;
+  if (dayInPhase <= 2 && g.firstDays) prior += g.firstDays;
+  let phasePart = prior * sens;
+  if (hot && g.heat && !s.hormonal) phasePart += g.heat;
+  const feelPart = FEELING_DELTA[feeling];
+  const point = Math.max(70, Math.min(100, Math.round(100 + phasePart + feelPart)));
+  return { point, phasePart: Math.round(phasePart), feelPart };
 }
