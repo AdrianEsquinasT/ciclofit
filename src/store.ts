@@ -3,7 +3,7 @@ import type { Session } from '@supabase/supabase-js';
 import { CycleSettings, PhaseId } from './cycle';
 import { Feeling } from './guidance';
 import { Workout } from './routine';
-import { DocKey, Row, cloudEnabled, pullAll, pushDoc, sb, ts } from './cloud';
+import { DocKey, Row, cloudEnabled, getSpaceId, pullAll, pushDoc, sb, ts } from './cloud';
 
 export type Log = Record<string, { f: Feeling; p: PhaseId }>;
 export interface Docs {
@@ -15,6 +15,7 @@ export type Status = 'off' | 'local' | 'syncing' | 'ok' | 'error';
 
 const LS: Record<DocKey, string> = { settings: 'ciclofit.settings.v1', routine: 'ciclofit.routine.v1', log: 'ciclofit.log.v1' };
 const META = 'ciclofit.meta.v1';
+const OWNER = 'ciclofit.owner.v1';
 const EPOCH1 = '1970-01-01T00:00:01.000Z'; // datos locales previos: pierden frente a la nube si ya existe
 
 const read = <T,>(k: string): T | null => {
@@ -57,6 +58,7 @@ export function useStore() {
   const [status, setStatus] = useState<Status>(cloudEnabled ? 'local' : 'off');
   const [errMsg, setErrMsg] = useState('');
   const timers = useRef<Partial<Record<DocKey, number>>>({});
+  const spaceRef = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
   sessionRef.current = session;
 
@@ -73,10 +75,10 @@ export function useStore() {
   }, [setDoc]);
 
   const push = useCallback(async (key: DocKey) => {
-    if (!sessionRef.current) return;
+    if (!sessionRef.current || !spaceRef.current) return;
     try {
       setStatus('syncing');
-      await pushDoc(key, docsRef.current[key], metaRef.current[key] ?? new Date().toISOString());
+      await pushDoc(spaceRef.current, key, docsRef.current[key], metaRef.current[key] ?? new Date().toISOString());
       setStatus('ok');
       setErrMsg('');
     } catch (e) {
@@ -97,17 +99,18 @@ export function useStore() {
   }, [push, setDoc]);
 
   const syncAll = useCallback(async () => {
-    if (!sessionRef.current) return;
+    if (!sessionRef.current || !spaceRef.current) return;
+    const sp = spaceRef.current;
     try {
       setStatus('syncing');
-      const rows = await pullAll();
+      const rows = await pullAll(sp);
       for (const key of ['settings', 'routine', 'log'] as DocKey[]) {
         const remote = rows.find((r: Row) => r.key === key);
         const localHas = key === 'settings' ? docsRef.current.settings !== null : key === 'routine' ? docsRef.current.routine.length > 0 : Object.keys(docsRef.current.log).length > 0;
         const lt = ts(metaRef.current[key]);
         const rt = ts(remote?.updated_at);
         if (!remote) {
-          if (localHas) await pushDoc(key, docsRef.current[key], metaRef.current[key] ?? new Date().toISOString());
+          if (localHas) await pushDoc(sp, key, docsRef.current[key], metaRef.current[key] ?? new Date().toISOString());
         } else if (key === 'log') {
           // el registro se fusiona por día; gana el lado más reciente en caso de choque
           const local = docsRef.current.log;
@@ -116,11 +119,11 @@ export function useStore() {
           const changedLocal = JSON.stringify(merged) !== JSON.stringify(local);
           const changedRemote = JSON.stringify(merged) !== JSON.stringify(rv);
           if (changedLocal) adopt('log', merged, new Date().toISOString());
-          if (changedRemote) await pushDoc('log', merged, metaRef.current.log ?? new Date().toISOString());
+          if (changedRemote) await pushDoc(sp, 'log', merged, metaRef.current.log ?? new Date().toISOString());
         } else if (rt > lt) {
           adopt(key, remote.value, remote.updated_at);
         } else if (lt > rt && localHas) {
-          await pushDoc(key, docsRef.current[key], metaRef.current[key]!);
+          await pushDoc(sp, key, docsRef.current[key], metaRef.current[key]!);
         }
       }
       setStatus('ok');
@@ -141,22 +144,49 @@ export function useStore() {
 
   // sincronizar al entrar, al volver a la app y en tiempo real
   useEffect(() => {
-    if (!sb || !session) return;
-    syncAll();
-    const onVis = () => document.visibilityState === 'visible' && syncAll();
-    document.addEventListener('visibilitychange', onVis);
-    const ch = sb
-      .channel('app_state_changes')
-      .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, (payload) => {
-        const row = payload.new as Row | undefined;
-        if (row && row.key && ts(row.updated_at) > ts(metaRef.current[row.key])) adopt(row.key, row.value, row.updated_at);
-      })
-      .subscribe();
+    if (!sb || !session) {
+      spaceRef.current = null;
+      return;
+    }
+    let cancelled = false;
+    let cleanup = () => {};
+    (async () => {
+      try {
+        // si entra otra cuenta distinta en este móvil, se descartan los datos locales de la anterior
+        const owner = localStorage.getItem(OWNER);
+        if (owner && owner !== session.user.id) {
+          (Object.values(LS) as string[]).concat(META).forEach((k) => localStorage.removeItem(k));
+          metaRef.current = {};
+          setDocs({ settings: null, routine: [], log: {} });
+          docsRef.current = { settings: null, routine: [], log: {} };
+        }
+        try { localStorage.setItem(OWNER, session.user.id); } catch { /* sin almacenamiento */ }
+        spaceRef.current = await getSpaceId();
+        if (cancelled) return;
+        await syncAll();
+        const onVis = () => document.visibilityState === 'visible' && syncAll();
+        document.addEventListener('visibilitychange', onVis);
+        const ch = sb!
+          .channel('app_state_changes')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'app_state' }, (payload) => {
+            const row = payload.new as Row | undefined;
+            if (row && row.key && row.space_id === spaceRef.current && ts(row.updated_at) > ts(metaRef.current[row.key])) adopt(row.key, row.value, row.updated_at);
+          })
+          .subscribe();
+        cleanup = () => {
+          document.removeEventListener('visibilitychange', onVis);
+          sb!.removeChannel(ch);
+        };
+      } catch (e) {
+        setStatus('error');
+        setErrMsg((e as Error).message);
+      }
+    })();
     return () => {
-      document.removeEventListener('visibilitychange', onVis);
-      sb!.removeChannel(ch);
+      cancelled = true;
+      cleanup();
     };
-  }, [session, syncAll, adopt]);
+  }, [session?.user.id, syncAll, adopt]);
 
   const signIn = async (email: string, password: string) => {
     const { error } = await sb!.auth.signInWithPassword({ email, password });
