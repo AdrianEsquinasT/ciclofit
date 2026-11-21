@@ -1,8 +1,10 @@
 import { useState } from 'react';
-import { Exercise, Workout, adjust, fmt, loadRoutine, saveRoutine, uid } from './routine';
+import { Exercise, Workout, adjust, fmt, uid } from './routine';
 import { Feeling, MODE_LABEL, Mode, Intensity } from './guidance';
 
 interface Props {
+  workouts: Workout[];
+  onChange: (w: Workout[]) => void;
   today: (mode: Mode) => Intensity;
   phaseName: string;
   feeling: Feeling;
@@ -12,15 +14,11 @@ const blank = (mode: Mode): Exercise => ({
   id: uid(), name: '', sets: 3, repsMin: 8, repsMax: 10, weight: 20, inc: 2.5, unit: mode === 'hyrox' ? 'm' : 'reps',
 });
 
-export default function Routine({ today, phaseName, feeling }: Props) {
-  const [workouts, setWorkouts] = useState<Workout[]>(loadRoutine);
-  const [selId, setSelId] = useState<string>(() => loadRoutine()[0]?.id ?? '');
+export default function Routine({ workouts, onChange, today, phaseName, feeling }: Props) {
+  const [selId, setSelId] = useState<string>(() => workouts[0]?.id ?? '');
   const [editing, setEditing] = useState<string | null>(null); // id de ejercicio o 'new'
 
-  const commit = (w: Workout[]) => {
-    setWorkouts(w);
-    saveRoutine(w);
-  };
+  const commit = onChange;
   const sel = workouts.find((w) => w.id === selId) ?? workouts[0];
   const patch = (fn: (w: Workout) => Workout) => commit(workouts.map((w) => (w.id === sel.id ? fn(w) : w)));
 

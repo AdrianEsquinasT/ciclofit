@@ -2,34 +2,18 @@ import { useEffect, useMemo, useState } from 'react';
 import { CycleSettings, PhaseId, addDays, cycleDay, fromISO, phaseOf, phaseRanges, toISO } from './cycle';
 import { FEELING_LABEL, FEELING_SCORE, Feeling, MODE_LABEL, Mode, PHASES, SENS_LABEL, intensity } from './guidance';
 import Routine from './Routine';
+import { Log, Status, useStore } from './store';
+import { cloudEnabled } from './cloud';
 
 type Tab = 'today' | 'routine' | 'cycle' | 'settings';
-type Log = Record<string, { f: Feeling; p: PhaseId }>;
-
-const KEY = 'ciclofit.settings.v1';
-const LOG = 'ciclofit.log.v1';
-const read = <T,>(k: string): T | null => {
-  try {
-    const raw = localStorage.getItem(k);
-    return raw ? (JSON.parse(raw) as T) : null;
-  } catch {
-    return null;
-  }
-};
-const write = (k: string, v: unknown) => {
-  try {
-    localStorage.setItem(k, JSON.stringify(v));
-  } catch {
-    /* sin almacenamiento */
-  }
-};
 
 const fmtDate = (iso: string) => fromISO(iso).toLocaleDateString('es-ES', { weekday: 'long', day: 'numeric', month: 'long' });
 const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 
 export default function App() {
-  const [settings, setSettings] = useState<CycleSettings | null>(() => read<CycleSettings>(KEY));
-  const [log, setLog] = useState<Log>(() => read<Log>(LOG) ?? {});
+  const store = useStore();
+  const settings = store.docs.settings;
+  const log = store.docs.log;
   const [tab, setTab] = useState<Tab>(settings ? 'today' : 'settings');
   const [mode, setMode] = useState<Mode>('strength');
   const [hot, setHot] = useState(false);
@@ -40,13 +24,10 @@ export default function App() {
 
   const setFeeling = (f: Feeling) => {
     if (!phaseNow) return;
-    const next = { ...log, [date]: { f, p: phaseNow.id } };
-    setLog(next);
-    write(LOG, next);
+    store.commit('log', { ...log, [date]: { f, p: phaseNow.id } });
   };
   const update = (s: CycleSettings) => {
-    setSettings(s);
-    write(KEY, s);
+    store.commit('settings', s);
     setTab('today');
   };
   const todayFor = (m: Mode) =>
@@ -58,9 +39,9 @@ export default function App() {
         {tab === 'today' && settings && phaseNow && (
           <Today s={settings} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} setFeeling={setFeeling} hot={hot} setHot={setHot} />
         )}
-        {tab === 'routine' && settings && phaseNow && <Routine today={todayFor} phaseName={PHASES[phaseNow.id].name} feeling={feeling} />}
+        {tab === 'routine' && settings && phaseNow && <Routine workouts={store.docs.routine} onChange={(w) => store.commit('routine', w)} today={todayFor} phaseName={PHASES[phaseNow.id].name} feeling={feeling} />}
         {tab === 'cycle' && settings && <CycleView s={settings} date={date} mode={mode} setMode={setMode} setDate={setDate} goToday={() => setTab('today')} log={log} hot={hot} />}
-        {tab === 'settings' && <Settings initial={settings} onSave={update} />}
+        {tab === 'settings' && <Settings initial={settings} onSave={update} store={store} />}
       </main>
       <nav className="tabs">
         {([
@@ -280,7 +261,7 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
   );
 }
 
-function Settings({ initial, onSave }: { initial: CycleSettings | null; onSave: (s: CycleSettings) => void }) {
+function Settings({ initial, onSave, store }: { initial: CycleSettings | null; onSave: (s: CycleSettings) => void; store: ReturnType<typeof useStore> }) {
   const [last, setLast] = useState(initial?.lastPeriodStart ?? '');
   const [cl, setCl] = useState(String(initial?.cycleLength ?? 28));
   const [pl, setPl] = useState(String(initial?.periodLength ?? 5));
@@ -321,6 +302,8 @@ function Settings({ initial, onSave }: { initial: CycleSettings | null; onSave: 
         <button className="primary" onClick={submit}>Guardar</button>
       </section>
 
+      <Account store={store} />
+
       <section className="card">
         <h3>Fuentes</h3>
         <ul className="tips src">
@@ -337,5 +320,56 @@ function Settings({ initial, onSave }: { initial: CycleSettings | null; onSave: 
         Ovulación ≈14 días antes del siguiente periodo. No es herramienta médica ni anticonceptiva.
       </p>
     </div>
+  );
+}
+
+const STATUS_TXT: Record<Status, string> = {
+  off: 'Nube no configurada',
+  local: 'Sin sesión: los datos solo están en este móvil',
+  syncing: 'Sincronizando…',
+  ok: 'Sincronizado',
+  error: 'Error de sincronización',
+};
+
+function Account({ store }: { store: ReturnType<typeof useStore> }) {
+  const [email, setEmail] = useState('');
+  const [pw, setPw] = useState('');
+  const [msg, setMsg] = useState('');
+  const [busy, setBusy] = useState(false);
+  if (!cloudEnabled) {
+    return (
+      <section className="card">
+        <h3>Cuenta y sincronización</h3>
+        <p className="muted small">{STATUS_TXT.off}. Los datos se guardan solo en este dispositivo.</p>
+      </section>
+    );
+  }
+  const login = async () => {
+    setBusy(true);
+    setMsg(await store.signIn(email.trim(), pw));
+    setBusy(false);
+  };
+  return (
+    <section className="card">
+      <h3>Cuenta y sincronización</h3>
+      {store.session ? (
+        <>
+          <p className="small">{store.session.user.email}</p>
+          <p className={store.status === 'error' ? 'error small' : 'muted small'}>{STATUS_TXT[store.status]}{store.errMsg ? `: ${store.errMsg}` : ''}</p>
+          <div className="row-btns">
+            <button className="ghost" onClick={store.syncAll}>Sincronizar ahora</button>
+            <button className="ghost" onClick={store.signOut}>Cerrar sesión</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <p className="muted small">Inicia sesión para compartir rutina, ciclo y registros entre móviles.</p>
+          <label className="field"><span>Correo</span><input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label className="field"><span>Contraseña</span><input type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+          {msg && <p className="error">{msg}</p>}
+          <button className="primary" onClick={login} disabled={busy || !email || !pw}>Entrar</button>
+        </>
+      )}
+    </section>
   );
 }
