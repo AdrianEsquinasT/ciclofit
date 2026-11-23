@@ -4,6 +4,7 @@ import { FEELING_LABEL, FEELING_SCORE, Feeling, MODE_LABEL, Mode, PHASES, SENS_L
 import Routine from './Routine';
 import { Log, Status, useStore } from './store';
 import { cloudEnabled } from './cloud';
+import { LOGIN_DOMAIN } from './supabaseConfig';
 
 type Tab = 'today' | 'routine' | 'cycle' | 'settings';
 
@@ -346,7 +347,8 @@ function Account({ store }: { store: ReturnType<typeof useStore> }) {
   }
   const login = async () => {
     setBusy(true);
-    setMsg(await store.signIn(email.trim(), pw));
+    const u = email.trim().toLowerCase();
+    setMsg(await store.signIn(u.includes('@') ? u : `${u}@${LOGIN_DOMAIN}`, pw));
     setBusy(false);
   };
   return (
@@ -354,7 +356,7 @@ function Account({ store }: { store: ReturnType<typeof useStore> }) {
       <h3>Cuenta y sincronización</h3>
       {store.session ? (
         <>
-          <p className="small">{store.session.user.email}</p>
+          <p className="small">{store.session.user.email?.split('@')[0]}</p>
           <p className={store.status === 'error' ? 'error small' : 'muted small'}>{STATUS_TXT[store.status]}{store.errMsg ? `: ${store.errMsg}` : ''}</p>
           <div className="row-btns">
             <button className="ghost" onClick={store.syncAll}>Sincronizar ahora</button>
@@ -364,7 +366,7 @@ function Account({ store }: { store: ReturnType<typeof useStore> }) {
       ) : (
         <>
           <p className="muted small">Inicia sesión para compartir rutina, ciclo y registros entre móviles.</p>
-          <label className="field"><span>Correo</span><input type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
+          <label className="field"><span>Usuario</span><input type="text" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="prueba" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
           <label className="field"><span>Contraseña</span><input type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
           {msg && <p className="error">{msg}</p>}
           <button className="primary" onClick={login} disabled={busy || !email || !pw}>Entrar</button>
