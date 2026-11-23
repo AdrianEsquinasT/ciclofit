@@ -4,7 +4,7 @@ import { FEELING_LABEL, FEELING_SCORE, Feeling, MODE_LABEL, Mode, PHASES, SENS_L
 import Routine from './Routine';
 import { Log, Status, useStore } from './store';
 import { cloudEnabled } from './cloud';
-import { LOGIN_DOMAIN } from './supabaseConfig';
+import { LOGIN_DOMAINS } from './supabaseConfig';
 
 type Tab = 'today' | 'routine' | 'cycle' | 'settings';
 
@@ -332,7 +332,12 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
   const login = async () => {
     setBusy(true);
     const u = user.trim().toLowerCase();
-    const e = await store.signIn(u.includes('@') ? u : `${u}@${LOGIN_DOMAIN}`, pw);
+    const candidates = u.includes('@') ? [u] : LOGIN_DOMAINS.map((d) => `${u}@${d}`);
+    let e = '';
+    for (const c of candidates) {
+      e = await store.signIn(c, pw);
+      if (!e) break;
+    }
     setMsg(e ? (/invalid login/i.test(e) ? 'Usuario o contraseña incorrectos.' : e) : '');
     setBusy(false);
   };
