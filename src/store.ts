@@ -8,7 +8,7 @@ import { DocKey, Row, cloudEnabled, getSpaceId, pullAll, pushDoc, sb, ts } from 
 
 export type { Log };
 const normLog = (raw: unknown): Log =>
-  Object.fromEntries(Object.entries((raw ?? {}) as Record<string, { f: unknown; p: Log[string]['p']; c?: string }>).map(([d, e]) => [d, { f: toScore(e.f), p: e.p, ...(e.c ? { c: e.c } : {}) }]));
+  Object.fromEntries(Object.entries((raw ?? {}) as Record<string, { f: unknown; p: Log[string]['p']; c?: string; x?: Log[string]['x'] }>).map(([d, e]) => [d, { f: toScore(e.f), p: e.p, ...(e.c ? { c: e.c } : {}), ...(e.x ? { x: e.x } : {}) }]));
 export interface Docs {
   settings: CycleSettings | null;
   routine: Workout[];

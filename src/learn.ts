@@ -4,7 +4,10 @@ export interface LogEntry {
   f: number; // sensación 1-10
   p: PhaseId; // fase en el momento del registro
   c?: string; // inicio del ciclo al que pertenece (YYYY-MM-DD)
+  x?: Cause; // causa de la baja energía, si no es el ciclo
 }
+export type Cause = 'cycle' | 'sleep' | 'food' | 'stress' | 'other';
+export const CAUSE_LABEL: Record<Cause, string> = { cycle: 'Regla / ciclo', sleep: 'Sueño', food: 'Comí poco', stress: 'Estrés', other: 'Otra' };
 export type Log = Record<string, LogEntry>;
 
 export interface PhaseStat {
@@ -41,7 +44,8 @@ export function learn(log: Log): Learned {
   let best: Learned['best'];
   if (active) {
     for (const ph of ALL) {
-      const xs = entries.filter((e) => e.p === ph && e.c && valid.has(e.c)).map((e) => e.f);
+      // los días con otra causa (sueño, comida, estrés...) ajustan la sesión de ese día, pero no el patrón del ciclo
+      const xs = entries.filter((e) => e.p === ph && e.c && valid.has(e.c) && (!e.x || e.x === 'cycle')).map((e) => e.f);
       if (xs.length >= MIN_PHASE) {
         const mean = xs.reduce((a, b) => a + b, 0) / xs.length;
         phases[ph] = { n: xs.length, mean, w: xs.length / (xs.length + K) };

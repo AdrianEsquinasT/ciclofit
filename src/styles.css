@@ -94,3 +94,5 @@ button:disabled { opacity: .5; }
 .scale button { height: 38px; border: 1px solid var(--line); border-radius: 10px; background: #00000035; color: var(--muted); font-weight: 700; font-size: 15px; padding: 0; }
 .scale button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
 .scale-lbl { display: flex; justify-content: space-between; margin: 6px 0 8px; gap: 6px; }
+.cause { margin: 10px 0 6px; flex-wrap: wrap; overflow: visible; }
+.chip:disabled { opacity: .4; }

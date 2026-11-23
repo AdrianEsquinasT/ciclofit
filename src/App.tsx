@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CycleSettings, PhaseId, addDays, cycleDay, fromISO, phaseOf, phaseRanges, toISO } from './cycle';
 import { DEFAULT_FEELING, Feeling, MODE_LABEL, Mode, PHASES, SENS_LABEL, feelLabel, intensity } from './guidance';
 import Routine from './Routine';
-import { learn, Learned, NEED_CYCLES } from './learn';
+import { CAUSE_LABEL, Cause, learn, Learned, NEED_CYCLES } from './learn';
 import { Log, Status, useStore } from './store';
 import { cloudEnabled } from './cloud';
 import { LOGIN_DOMAINS } from './supabaseConfig';
@@ -26,9 +26,15 @@ export default function App() {
   const learned = useMemo(() => learn(log), [log]);
   const phaseNow = settings ? phaseOf(settings, cycleDay(settings, date)) : null;
 
+  const setCause = (x: Cause | undefined) => {
+    const cur = log[date];
+    if (!cur) return;
+    const { x: _old, ...rest } = cur;
+    store.commit('log', { ...log, [date]: x ? { ...rest, x } : rest });
+  };
   const setFeeling = (f: Feeling) => {
     if (!phaseNow) return;
-    store.commit('log', { ...log, [date]: { f, p: phaseNow.id, c: addDays(date, -(cycleDay(settings!, date) - 1)) } });
+    store.commit('log', { ...log, [date]: { ...(log[date] ?? {}), f, p: phaseNow.id, c: addDays(date, -(cycleDay(settings!, date) - 1)) } });
   };
   const update = (s: CycleSettings) => {
     store.commit('settings', s);
@@ -44,7 +50,7 @@ export default function App() {
     <div className="app">
       <main>
         {tab === 'today' && settings && phaseNow && (
-          <Today s={settings} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} logged={logged} learned={learned} setFeeling={setFeeling} hot={hot} setHot={setHot} />
+          <Today s={settings} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} logged={logged} learned={learned} cause={log[date]?.x} setCause={setCause} setFeeling={setFeeling} hot={hot} setHot={setHot} />
         )}
         {tab === 'routine' && settings && phaseNow && <Routine workouts={store.docs.routine} onChange={(w) => store.commit('routine', w)} today={todayFor} phaseName={PHASES[phaseNow.id].name} feeling={feeling} />}
         {tab === 'cycle' && settings && <CycleView s={settings} date={date} mode={mode} setMode={setMode} setDate={setDate} goToday={() => setTab('today')} log={log} hot={hot} learned={learned} />}
@@ -93,7 +99,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 
 function Today(p: {
   s: CycleSettings; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void;
-  feeling: Feeling; logged?: number; learned: Learned; setFeeling: (f: Feeling) => void; hot: boolean; setHot: (b: boolean) => void;
+  feeling: Feeling; logged?: number; learned: Learned; cause?: Cause; setCause: (x: Cause | undefined) => void; setFeeling: (f: Feeling) => void; hot: boolean; setHot: (b: boolean) => void;
 }) {
   const day = cycleDay(p.s, p.date);
   const ph = phaseOf(p.s, day);
@@ -124,15 +130,22 @@ function Today(p: {
       </header>
 
       <section className="card">
-        <h3>¿Cómo te sientes hoy? <span className="muted small">(1–10)</span></h3>
+        <h3>¿Cuánta energía tienes hoy? <span className="muted small">(1–10)</span></h3>
         <div className="scale">
           {Array.from({ length: 10 }, (_, k) => k + 1).map((n) => (
             <button key={n} className={p.logged === n ? 'on' : ''} onClick={() => p.setFeeling(n)}>{n}</button>
           ))}
         </div>
-        <div className="scale-lbl muted small"><span>1 · fatal</span><span>{p.logged ? feelLabel(p.logged) : `sin registrar (se asume ${DEFAULT_FEELING})`}</span><span>10 · genial</span></div>
+        <div className="scale-lbl muted small"><span>1 · sin energía</span><span>{p.logged ? feelLabel(p.logged) : `sin registrar (se asume ${DEFAULT_FEELING})`}</span><span>10 · a tope</span></div>
+        <div className="chips cause">
+          {(Object.keys(CAUSE_LABEL) as Cause[]).map((c) => (
+            <button key={c} className={p.cause === c ? 'chip on' : 'chip'} disabled={!p.logged} onClick={() => p.setCause(p.cause === c ? undefined : c)}>
+              {CAUSE_LABEL[c]}
+            </button>
+          ))}
+        </div>
         <p className="muted small">
-          Es el factor que más pesa: la evidencia muestra que la fase explica poco y los síntomas explican más. El 10 no descuenta; cada punto menos resta algo más (el 9 ≈ −1, el 8 ≈ −2, hasta −10 con un 1). Se guarda para ver tu patrón personal en “Ciclo”.
+          Sé sincera: la sesión se ajusta a la energía que tienes hoy, sea por la regla, el sueño o por haber comido poco. El 10 no descuenta; cada punto menos resta algo más (el 9 ≈ −1, el 8 ≈ −2, hasta −10 con un 1). Si la causa no es el ciclo, márcala: ajusta hoy, pero no cuenta en tu patrón de fases.
         </p>
         {p.mode === 'hyrox' && (
           <label className="check">
@@ -232,7 +245,7 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
           <>
             <p className="small">Aprendiendo: <b>{p.learned.cycles} de {NEED_CYCLES}</b> ciclos con datos suficientes ({p.learned.total} registros).</p>
             <div className="bar"><div style={{ width: `${Math.min(100, (p.learned.cycles / NEED_CYCLES) * 100)}%`, background: 'var(--accent)' }} /></div>
-            <p className="muted small">Registra cómo te sientes cada día (al menos 7 días por ciclo). Tras {NEED_CYCLES} ciclos, la app dejará de usar valores generales y se ajustará a tu patrón.</p>
+            <p className="muted small">Registra tu energía cada día (al menos 7 días por ciclo). Tras {NEED_CYCLES} ciclos, la app dejará de usar valores generales y se ajustará a tu patrón.</p>
           </>
         ) : (
           <>
@@ -248,7 +261,7 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
                 </div>
               );
             })}
-            <p className="muted small">El porcentaje indica cuánto pesa tu patrón frente a los valores generales; crece con más registros. Los descuentos ya usan estos datos.</p>
+            <p className="muted small">El porcentaje indica cuánto pesa tu patrón frente a los valores generales; crece con más registros. Los descuentos ya usan estos datos. Los días marcados con otra causa (sueño, comida, estrés…) no cuentan.</p>
           </>
         )}
       </section>
