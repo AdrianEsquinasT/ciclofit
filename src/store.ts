@@ -1,13 +1,14 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
-import { CycleSettings, PhaseId } from './cycle';
-import { Feeling, toScore } from './guidance';
+import { CycleSettings } from './cycle';
+import { toScore } from './guidance';
+import type { Log } from './learn';
 import { Workout } from './routine';
 import { DocKey, Row, cloudEnabled, getSpaceId, pullAll, pushDoc, sb, ts } from './cloud';
 
-export type Log = Record<string, { f: Feeling; p: PhaseId }>;
+export type { Log };
 const normLog = (raw: unknown): Log =>
-  Object.fromEntries(Object.entries((raw ?? {}) as Record<string, { f: unknown; p: PhaseId }>).map(([d, e]) => [d, { f: toScore(e.f), p: e.p }]));
+  Object.fromEntries(Object.entries((raw ?? {}) as Record<string, { f: unknown; p: Log[string]['p']; c?: string }>).map(([d, e]) => [d, { f: toScore(e.f), p: e.p, ...(e.c ? { c: e.c } : {}) }]));
 export interface Docs {
   settings: CycleSettings | null;
   routine: Workout[];

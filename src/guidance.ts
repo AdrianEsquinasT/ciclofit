@@ -1,4 +1,5 @@
 import { CycleSettings, PhaseId } from './cycle';
+import type { Learned } from './learn';
 
 export type Mode = 'strength' | 'hyrox';
 export type Feeling = number; // 1 (fatal) .. 10 (genial)
@@ -200,23 +201,36 @@ export interface Intensity {
   point: number;
   phasePart: number; // puntos aportados por fase (+calor)
   feelPart: number; // puntos aportados por sensación
+  w: number; // peso del aprendizaje personal aplicado (0..1)
 }
 
+/**
+ * Intensidad objetivo (% del pico).
+ * - Sin aprendizaje: prior poblacional por fase + sensación (registrada, o 8 si no hay registro).
+ * - Con aprendizaje (≥2 ciclos con datos): el prior se sustituye gradualmente (peso w) por el patrón
+ *   personal: la mejor fase de ella pasa a ser su "pico", y si no ha registrado hoy se usa su media de la fase.
+ */
 export function intensity(
   s: CycleSettings,
   phaseId: PhaseId,
   mode: Mode,
   dayInPhase: number,
-  feeling: Feeling,
+  logged: number | undefined,
   hot: boolean,
+  learned?: Learned,
 ): Intensity {
   const g = PHASES[phaseId].modes[mode];
   const sens = s.hormonal ? 0 : s.sensitivity ?? 1;
   let prior = g.prior;
   if (dayInPhase <= 2 && g.firstDays) prior += g.firstDays;
-  let phasePart = prior * sens;
+
+  const st = !s.hormonal && learned?.active ? learned.phases[phaseId] : undefined;
+  const w = st?.w ?? 0;
+  const fUsed = logged ?? (st ? st.mean : DEFAULT_FEELING);
+
+  let phasePart = (1 - w) * prior * sens;
   if (hot && g.heat && !s.hormonal) phasePart += g.heat;
-  const feelPart = feelDelta(feeling);
+  const feelPart = feelDelta(fUsed) - w * (learned?.dBest ?? 0);
   const point = Math.max(70, Math.min(100, Math.round(100 + phasePart + feelPart)));
-  return { point, phasePart: Math.round(phasePart), feelPart };
+  return { point, phasePart: Math.round(phasePart), feelPart: Math.round(feelPart), w };
 }

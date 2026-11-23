@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { CycleSettings, PhaseId, addDays, cycleDay, fromISO, phaseOf, phaseRanges, toISO } from './cycle';
 import { DEFAULT_FEELING, Feeling, MODE_LABEL, Mode, PHASES, SENS_LABEL, feelLabel, intensity } from './guidance';
 import Routine from './Routine';
+import { learn, Learned, NEED_CYCLES } from './learn';
 import { Log, Status, useStore } from './store';
 import { cloudEnabled } from './cloud';
 import { LOGIN_DOMAINS } from './supabaseConfig';
@@ -22,18 +23,19 @@ export default function App() {
 
   const logged = log[date]?.f;
   const feeling: Feeling = logged ?? DEFAULT_FEELING;
+  const learned = useMemo(() => learn(log), [log]);
   const phaseNow = settings ? phaseOf(settings, cycleDay(settings, date)) : null;
 
   const setFeeling = (f: Feeling) => {
     if (!phaseNow) return;
-    store.commit('log', { ...log, [date]: { f, p: phaseNow.id } });
+    store.commit('log', { ...log, [date]: { f, p: phaseNow.id, c: addDays(date, -(cycleDay(settings!, date) - 1)) } });
   };
   const update = (s: CycleSettings) => {
     store.commit('settings', s);
     setTab('today');
   };
   const todayFor = (m: Mode) =>
-    intensity(settings!, phaseNow!.id, m, phaseNow!.dayInPhase, feeling, hot);
+    intensity(settings!, phaseNow!.id, m, phaseNow!.dayInPhase, logged, hot, learned);
 
   if (cloudEnabled && !store.ready) return <div className="app"><p className="muted splash">Cargando…</p></div>;
   if (cloudEnabled && !store.session) return <div className="app"><Login store={store} /></div>;
@@ -42,10 +44,10 @@ export default function App() {
     <div className="app">
       <main>
         {tab === 'today' && settings && phaseNow && (
-          <Today s={settings} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} logged={logged} setFeeling={setFeeling} hot={hot} setHot={setHot} />
+          <Today s={settings} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} logged={logged} learned={learned} setFeeling={setFeeling} hot={hot} setHot={setHot} />
         )}
         {tab === 'routine' && settings && phaseNow && <Routine workouts={store.docs.routine} onChange={(w) => store.commit('routine', w)} today={todayFor} phaseName={PHASES[phaseNow.id].name} feeling={feeling} />}
-        {tab === 'cycle' && settings && <CycleView s={settings} date={date} mode={mode} setMode={setMode} setDate={setDate} goToday={() => setTab('today')} log={log} hot={hot} />}
+        {tab === 'cycle' && settings && <CycleView s={settings} date={date} mode={mode} setMode={setMode} setDate={setDate} goToday={() => setTab('today')} log={log} hot={hot} learned={learned} />}
         {tab === 'settings' && <Settings initial={settings} onSave={update} store={store} />}
       </main>
       <nav className="tabs">
@@ -91,13 +93,13 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 
 function Today(p: {
   s: CycleSettings; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void;
-  feeling: Feeling; logged?: number; setFeeling: (f: Feeling) => void; hot: boolean; setHot: (b: boolean) => void;
+  feeling: Feeling; logged?: number; learned: Learned; setFeeling: (f: Feeling) => void; hot: boolean; setHot: (b: boolean) => void;
 }) {
   const day = cycleDay(p.s, p.date);
   const ph = phaseOf(p.s, day);
   const info = PHASES[ph.id];
   const g = info.modes[p.mode];
-  const it = intensity(p.s, ph.id, p.mode, ph.dayInPhase, p.feeling, p.hot);
+  const it = intensity(p.s, ph.id, p.mode, ph.dayInPhase, p.logged, p.hot, p.learned);
   const isToday = p.date === toISO(new Date());
   const drop = 100 - it.point;
 
@@ -116,7 +118,7 @@ function Today(p: {
         <Ring pct={it.point} color={info.color} />
         <div className="range">
           {drop === 0 ? <b>Capacidad completa</b> : <>Baja <b>{drop}%</b> respecto a tu pico</>}
-          <div className="muted small">Fase {it.phasePart === 0 ? '0' : it.phasePart}% · sensación {it.feelPart === 0 ? '0' : it.feelPart}%</div>
+          <div className="muted small">Fase {it.phasePart}% · sensación {it.feelPart}%{it.w > 0 ? ` · ajustado a tu patrón (${Math.round(it.w * 100)}%)` : ''}</div>
         </div>
         <ModeSwitch mode={p.mode} setMode={p.setMode} />
       </header>
@@ -192,12 +194,12 @@ function Calculator({ mode, pct }: { mode: Mode; pct: number }) {
   );
 }
 
-function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void; goToday: () => void; log: Log; hot: boolean }) {
+function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void; goToday: () => void; log: Log; hot: boolean; learned: Learned }) {
   const day = cycleDay(p.s, p.date);
   const days = Array.from({ length: p.s.cycleLength }, (_, i) => i + 1);
   const vals = days.map((d) => {
     const ph = phaseOf(p.s, d);
-    return intensity(p.s, ph.id, p.mode, ph.dayInPhase, DEFAULT_FEELING, p.hot).point;
+    return intensity(p.s, ph.id, p.mode, ph.dayInPhase, undefined, p.hot, p.learned).point;
   });
   const W = 340, H = 120, padX = 8, padY = 14, LO = 85;
   const x = (i: number) => padX + (i * (W - 2 * padX)) / (days.length - 1);
@@ -206,18 +208,12 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
   const ranges = phaseRanges(p.s);
   const offset = Math.floor(Math.round((fromISO(p.date).getTime() - fromISO(p.s.lastPeriodStart).getTime()) / 86400000) / p.s.cycleLength) * p.s.cycleLength;
 
-  const stats = ranges.map((r) => {
-    const entries = Object.values(p.log).filter((e) => e.p === r.id);
-    const avg = entries.length ? entries.reduce((a, e) => a + e.f, 0) / entries.length : null;
-    return { id: r.id, n: entries.length, avg };
-  });
-
   return (
     <div className="stack">
       <h2>Tu ciclo</h2>
       <ModeSwitch mode={p.mode} setMode={p.setMode} />
       <section className="card">
-        <h3>Objetivo por día (sensación 8+) · {MODE_LABEL[p.mode]}</h3>
+        <h3>Objetivo por día (sin registrar sensación) · {MODE_LABEL[p.mode]}</h3>
         <svg viewBox={`0 0 ${W} ${H}`} className="chart">
           {ranges.map((r) => (
             <rect key={r.id} x={x(r.start - 1) - 2} y="0" width={x(r.end - 1) - x(r.start - 1) + 4} height={H} fill={PHASES[r.id].color} opacity="0.14" />
@@ -231,18 +227,29 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
       </section>
 
       <section className="card">
-        <h3>Tu patrón personal</h3>
-        {stats.every((s) => s.n === 0) ? (
-          <p className="muted small">Registra cómo te sientes cada día en “Hoy”. Con unas semanas verás en qué fases rinde mejor o peor, que es la forma más fiable de personalizar.</p>
+        <h3>Tu patrón aprendido</h3>
+        {!p.learned.active ? (
+          <>
+            <p className="small">Aprendiendo: <b>{p.learned.cycles} de {NEED_CYCLES}</b> ciclos con datos suficientes ({p.learned.total} registros).</p>
+            <div className="bar"><div style={{ width: `${Math.min(100, (p.learned.cycles / NEED_CYCLES) * 100)}%`, background: 'var(--accent)' }} /></div>
+            <p className="muted small">Registra cómo te sientes cada día (al menos 7 días por ciclo). Tras {NEED_CYCLES} ciclos, la app dejará de usar valores generales y se ajustará a tu patrón.</p>
+          </>
         ) : (
-          stats.map((s) => (
-            <div key={s.id} className="pat">
-              <span className="dot" style={{ background: PHASES[s.id].color }} />
-              <span className="pat-n">{PHASES[s.id].name}</span>
-              <div className="bar"><div style={{ width: `${s.avg === null ? 0 : (s.avg / 10) * 100}%`, background: PHASES[s.id].color }} /></div>
-              <span className="muted small">{s.n} d</span>
-            </div>
-          ))
+          <>
+            {p.learned.best && <p className="small">Tu mejor fase: <b>{PHASES[p.learned.best.phase].name}</b> (sensación media {p.learned.best.mean.toFixed(1).replace('.', ',')}). Es tu referencia de “día pico”.</p>}
+            {ranges.map((r) => {
+              const s = p.learned.phases[r.id];
+              return (
+                <div key={r.id} className="pat">
+                  <span className="dot" style={{ background: PHASES[r.id].color }} />
+                  <span className="pat-n">{PHASES[r.id].name}</span>
+                  <div className="bar"><div style={{ width: `${s ? (s.mean / 10) * 100 : 0}%`, background: PHASES[r.id].color }} /></div>
+                  <span className="muted small">{s ? `${s.mean.toFixed(1).replace('.', ',')} · ${Math.round(s.w * 100)}%` : 'sin datos'}</span>
+                </div>
+              );
+            })}
+            <p className="muted small">El porcentaje indica cuánto pesa tu patrón frente a los valores generales; crece con más registros. Los descuentos ya usan estos datos.</p>
+          </>
         )}
       </section>
 
