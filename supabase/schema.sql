@@ -35,6 +35,11 @@ create policy "state update" on public.app_state for update to authenticated
   using (space_id in (select space_id from public.space_members where user_id = auth.uid()))
   with check (space_id in (select space_id from public.space_members where user_id = auth.uid()));
 
+-- Permisos de tabla (RLS filtra después las filas)
+grant usage on schema public to authenticated;
+grant select on public.space_members to authenticated;
+grant select, insert, update on public.app_state to authenticated;
+
 -- Cada usuario nuevo recibe automáticamente su propio espacio
 create or replace function public.handle_new_user() returns trigger
 language plpgsql security definer set search_path = public as $$
