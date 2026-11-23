@@ -34,6 +34,9 @@ export default function App() {
   const todayFor = (m: Mode) =>
     intensity(settings!, phaseNow!.id, m, phaseNow!.dayInPhase, feeling, hot);
 
+  if (cloudEnabled && !store.ready) return <div className="app"><p className="muted splash">Cargando…</p></div>;
+  if (cloudEnabled && !store.session) return <div className="app"><Login store={store} /></div>;
+
   return (
     <div className="app">
       <main>
@@ -305,17 +308,6 @@ function Settings({ initial, onSave, store }: { initial: CycleSettings | null; o
 
       <Account store={store} />
 
-      <section className="card">
-        <h3>Fuentes</h3>
-        <ul className="tips src">
-          <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC7497427/" target="_blank" rel="noreferrer">McNulty 2020 – metaanálisis de rendimiento por fase (Sports Med)</a></li>
-          <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC10076834" target="_blank" rel="noreferrer">Colenso-Semple 2023 – fuerza e hipertrofia (Front Sports Act Living)</a></li>
-          <li><a href="https://pubmed.ncbi.nlm.nih.gov/22776870/" target="_blank" rel="noreferrer">Janse de Jonge 2012 – ejercicio en calor por fase</a></li>
-          <li><a href="https://pubmed.ncbi.nlm.nih.gov/28795075/" target="_blank" rel="noreferrer">Laxidad y lesiones de LCA por fase – metaanálisis 2017</a></li>
-          <li><a href="https://pmc.ncbi.nlm.nih.gov/articles/PMC9879429" target="_blank" rel="noreferrer">Revisión 2022 – LCA y fase (inconcluyente)</a></li>
-          <li><a href="https://bjsm.bmj.com/content/55/8/438.full.pdf" target="_blank" rel="noreferrer">Encuesta de síntomas en mujeres que entrenan (BJSM)</a></li>
-        </ul>
-      </section>
       <p className="foot">
         Los descuentos son pequeños porque la evidencia poblacional lo es: efecto trivial, calidad baja y gran variación individual. Lo más fiable es personalizar con vuestro registro.
         Ovulación ≈14 días antes del siguiente periodo. No es herramienta médica ni anticonceptiva.
@@ -332,12 +324,34 @@ const STATUS_TXT: Record<Status, string> = {
   error: 'Error de sincronización',
 };
 
-function Account({ store }: { store: ReturnType<typeof useStore> }) {
-  const [email, setEmail] = useState('');
+function Login({ store }: { store: ReturnType<typeof useStore> }) {
+  const [user, setUser] = useState('');
   const [pw, setPw] = useState('');
   const [msg, setMsg] = useState('');
   const [busy, setBusy] = useState(false);
-  if (!cloudEnabled) {
+  const login = async () => {
+    setBusy(true);
+    const u = user.trim().toLowerCase();
+    const e = await store.signIn(u.includes('@') ? u : `${u}@${LOGIN_DOMAIN}`, pw);
+    setMsg(e ? (/invalid login/i.test(e) ? 'Usuario o contraseña incorrectos.' : e) : '');
+    setBusy(false);
+  };
+  return (
+    <form className="stack login" onSubmit={(e) => { e.preventDefault(); if (user && pw && !busy) login(); }}>
+      <h2>CicloFit</h2>
+      <p className="muted">Inicia sesión para continuar.</p>
+      <section className="card">
+        <label className="field"><span>Usuario</span><input type="text" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} value={user} onChange={(e) => setUser(e.target.value)} /></label>
+        <label className="field"><span>Contraseña</span><input type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
+        {msg && <p className="error">{msg}</p>}
+        <button className="primary" type="submit" disabled={busy || !user || !pw}>{busy ? 'Entrando…' : 'Entrar'}</button>
+      </section>
+    </form>
+  );
+}
+
+function Account({ store }: { store: ReturnType<typeof useStore> }) {
+  if (!cloudEnabled || !store.session) {
     return (
       <section className="card">
         <h3>Cuenta y sincronización</h3>
@@ -345,33 +359,15 @@ function Account({ store }: { store: ReturnType<typeof useStore> }) {
       </section>
     );
   }
-  const login = async () => {
-    setBusy(true);
-    const u = email.trim().toLowerCase();
-    setMsg(await store.signIn(u.includes('@') ? u : `${u}@${LOGIN_DOMAIN}`, pw));
-    setBusy(false);
-  };
   return (
     <section className="card">
       <h3>Cuenta y sincronización</h3>
-      {store.session ? (
-        <>
-          <p className="small">{store.session.user.email?.split('@')[0]}</p>
-          <p className={store.status === 'error' ? 'error small' : 'muted small'}>{STATUS_TXT[store.status]}{store.errMsg ? `: ${store.errMsg}` : ''}</p>
-          <div className="row-btns">
-            <button className="ghost" onClick={store.syncAll}>Sincronizar ahora</button>
-            <button className="ghost" onClick={store.signOut}>Cerrar sesión</button>
-          </div>
-        </>
-      ) : (
-        <>
-          <p className="muted small">Inicia sesión para compartir rutina, ciclo y registros entre móviles.</p>
-          <label className="field"><span>Usuario</span><input type="text" autoComplete="username" autoCapitalize="none" autoCorrect="off" spellCheck={false} placeholder="prueba" value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-          <label className="field"><span>Contraseña</span><input type="password" autoComplete="current-password" value={pw} onChange={(e) => setPw(e.target.value)} /></label>
-          {msg && <p className="error">{msg}</p>}
-          <button className="primary" onClick={login} disabled={busy || !email || !pw}>Entrar</button>
-        </>
-      )}
+      <p className="small">{store.session.user.email?.split('@')[0]}</p>
+      <p className={store.status === 'error' ? 'error small' : 'muted small'}>{STATUS_TXT[store.status]}{store.errMsg ? `: ${store.errMsg}` : ''}</p>
+      <div className="row-btns">
+        <button className="ghost" onClick={store.syncAll}>Sincronizar ahora</button>
+        <button className="ghost" onClick={store.signOut}>Cerrar sesión</button>
+      </div>
     </section>
   );
 }

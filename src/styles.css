@@ -87,3 +87,6 @@ select { background: var(--bg); color: var(--text); border: 1px solid var(--line
 .bar div { height: 100%; }
 .src a { color: #9ec5ff; }
 .tabs button { padding: 12px 4px; font-size: 14px; }
+.splash { text-align: center; margin-top: 40vh; }
+.login { margin-top: 12vh; }
+button:disabled { opacity: .5; }

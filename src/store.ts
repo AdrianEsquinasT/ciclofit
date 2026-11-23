@@ -57,6 +57,7 @@ export function useStore() {
   const [session, setSession] = useState<Session | null>(null);
   const [status, setStatus] = useState<Status>(cloudEnabled ? 'local' : 'off');
   const [errMsg, setErrMsg] = useState('');
+  const [ready, setReady] = useState(!cloudEnabled);
   const timers = useRef<Partial<Record<DocKey, number>>>({});
   const spaceRef = useRef<string | null>(null);
   const sessionRef = useRef<Session | null>(null);
@@ -137,7 +138,7 @@ export function useStore() {
   // sesión
   useEffect(() => {
     if (!sb) return;
-    sb.auth.getSession().then(({ data }) => setSession(data.session));
+    sb.auth.getSession().then(({ data }) => { setSession(data.session); setReady(true); }).catch(() => setReady(true));
     const { data } = sb.auth.onAuthStateChange((_e, s) => setSession(s));
     return () => data.subscription.unsubscribe();
   }, []);
@@ -197,5 +198,5 @@ export function useStore() {
     setStatus('local');
   };
 
-  return { docs, commit, session, status, errMsg, syncAll, signIn, signOut };
+  return { docs, commit, session, ready, status, errMsg, syncAll, signIn, signOut };
 }
