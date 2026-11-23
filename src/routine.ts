@@ -54,7 +54,7 @@ export const fmt = (n: number) => String(Math.round(n * 100) / 100).replace('.',
 /** Devuelve la sesión del día a partir del peso/reps "de día pico". */
 export function adjust(ex: Exercise, mode: Mode, pct: number): Adjusted {
   const f = pct / 100;
-  const noChange = pct >= 98;
+  const noChange = pct >= 100;
   let weight = ex.weight;
   let sets = ex.sets;
   let repsMin = ex.repsMin;
@@ -71,7 +71,7 @@ export function adjust(ex: Exercise, mode: Mode, pct: number): Adjusted {
       repsMin = Math.max(5, Math.round((ex.repsMin * k) / 5) * 5);
       repsMax = Math.max(repsMin, Math.round((ex.repsMax * k) / 5) * 5);
       if (repsMin !== ex.repsMin) notes.push('menos distancia');
-    } else if (weight === ex.weight && ex.weight > 0) {
+    } else if (weight === ex.weight && ex.weight > 0 && pct <= 97) {
       // el redondeo absorbe el descuento: mismo peso, 1 rep menos
       repsMin = Math.max(1, ex.repsMin - 1);
       repsMax = Math.max(repsMin, ex.repsMax - 1);

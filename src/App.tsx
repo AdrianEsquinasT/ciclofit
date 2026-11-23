@@ -130,7 +130,7 @@ function Today(p: {
         </div>
         <div className="scale-lbl muted small"><span>1 · fatal</span><span>{p.logged ? feelLabel(p.logged) : `sin registrar (se asume ${DEFAULT_FEELING})`}</span><span>10 · genial</span></div>
         <p className="muted small">
-          Es el factor que más pesa: la evidencia muestra que la fase explica poco y los síntomas explican más. De 8 a 10 no hay descuento; por debajo, baja progresivamente (hasta −10). Se guarda para ver tu patrón personal en “Ciclo”.
+          Es el factor que más pesa: la evidencia muestra que la fase explica poco y los síntomas explican más. El 10 no descuenta; cada punto menos resta algo más (el 9 ≈ −1, el 8 ≈ −2, hasta −10 con un 1). Se guarda para ver tu patrón personal en “Ciclo”.
         </p>
         {p.mode === 'hyrox' && (
           <label className="check">

@@ -26,16 +26,16 @@ export interface PhaseInfo {
 }
 
 export const MODE_LABEL: Record<Mode, string> = { strength: 'Pesas', hyrox: 'Hyrox' };
-export const DEFAULT_FEELING = 8; // si no se registra, se asume un día normal
+export const DEFAULT_FEELING = 8; // si no se registra, se asume un día normal (descuento −2)
 export const toScore = (f: unknown): number => {
   if (typeof f === 'number' && f >= 1 && f <= 10) return Math.round(f);
   const legacy: Record<string, number> = { great: 9, ok: 8, low: 5, bad: 2 }; // registros antiguos
   return typeof f === 'string' && f in legacy ? legacy[f] : DEFAULT_FEELING;
 };
-/** 8-10: sin descuento. Por debajo, −1,5 puntos por cada punto de menos (máx. −10). */
-export const feelDelta = (s: number) => (s >= 8 ? 0 : -Math.min(10, Math.round((8 - s) * 1.5)));
+/** 10 = sin descuento; cada punto menos resta ≈1,1 puntos (1 → −10). */
+export const feelDelta = (s: number) => -Math.round(((10 - s) * 10) / 9);
 export const feelLabel = (s: number) =>
-  s >= 9 ? 'Genial' : s >= 8 ? 'Bien' : s >= 6 ? 'Normal-baja' : s >= 4 ? 'Floja' : 'Muy mal';
+  s >= 10 ? 'Genial' : s >= 8 ? 'Bien' : s >= 6 ? 'Normal-baja' : s >= 4 ? 'Floja' : 'Muy mal';
 
 export const SENS_LABEL = ['Ignorar fase', 'Estándar', 'Alta'];
 
