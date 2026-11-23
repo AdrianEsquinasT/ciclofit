@@ -34,17 +34,31 @@ const diffDays = (a: string, b: string) => {
   return Math.round((Date.UTC(A.getFullYear(), A.getMonth(), A.getDate()) - Date.UTC(B.getFullYear(), B.getMonth(), B.getDate())) / 86400000);
 };
 
-/** Día del ciclo (1..cycleLength). Si la fecha supera el ciclo, se asume uno nuevo. */
+/** Días desde el inicio de la última regla (negativo si la fecha es anterior). */
+export const daysSince = (s: CycleSettings, iso: string) => diffDays(iso, s.lastPeriodStart);
+
+/**
+ * Día del ciclo (1..cycleLength). Si la regla se retrasa, se queda en el último día
+ * (hasta 7 días de margen) en vez de reiniciar; pasado ese margen se asume un ciclo nuevo.
+ */
 export function cycleDay(s: CycleSettings, iso: string): number {
   const diff = diffDays(iso, s.lastPeriodStart);
-  return ((diff % s.cycleLength) + s.cycleLength) % s.cycleLength + 1;
+  const L = s.cycleLength;
+  if (diff >= 0 && diff < L) return diff + 1;
+  if (diff >= L && diff < L + 7) return L;
+  return ((diff % L) + L) % L + 1;
 }
 
-/** Fase lútea ≈ 14 días de media (más estable que la folicular). */
+export const isLate = (s: CycleSettings, iso: string) => {
+  const diff = diffDays(iso, s.lastPeriodStart);
+  return diff >= s.cycleLength && diff < s.cycleLength + 7;
+};
+
+/** Fase lútea ≈ 13 días (los estudios dan 12–14 según el método; la folicular es la más variable). */
 export function phaseRanges(s: CycleSettings): PhaseRange[] {
   const L = s.cycleLength;
   const p = s.periodLength;
-  const ov = Math.max(L - 14, p + 3);
+  const ov = Math.max(L - 13, p + 3);
   return [
     { id: 'menstrual', start: 1, end: p },
     { id: 'follicular', start: p + 1, end: ov - 2 },

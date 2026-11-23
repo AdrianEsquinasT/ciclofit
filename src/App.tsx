@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
-import { CycleSettings, PhaseId, addDays, cycleDay, fromISO, phaseOf, phaseRanges, toISO } from './cycle';
+import { CycleSettings, PhaseId, addDays, cycleDay, daysSince, fromISO, isLate, phaseOf, phaseRanges, toISO } from './cycle';
 import { DEFAULT_FEELING, Feeling, MODE_LABEL, Mode, PHASES, SENS_LABEL, feelLabel, intensity } from './guidance';
 import Routine from './Routine';
+import { Period, effective, endPeriod, periodDays, removePeriod, startPeriod, stats } from './periods';
 import { CAUSE_LABEL, Cause, learn, Learned, NEED_CYCLES } from './learn';
 import { Log, Status, useStore } from './store';
 import { cloudEnabled } from './cloud';
@@ -14,9 +15,11 @@ const clamp = (n: number, a: number, b: number) => Math.max(a, Math.min(b, n));
 
 export default function App() {
   const store = useStore();
-  const settings = store.docs.settings;
+  const baseSettings = store.docs.settings;
+  const periods = store.docs.periods;
+  const settings = useMemo(() => (baseSettings ? effective(baseSettings, periods) : null), [baseSettings, periods]);
   const log = store.docs.log;
-  const [tab, setTab] = useState<Tab>(settings ? 'today' : 'settings');
+  const [tab, setTab] = useState<Tab>(baseSettings ? 'today' : 'settings');
   const [mode, setMode] = useState<Mode>('strength');
   const [hot, setHot] = useState(false);
   const [date, setDate] = useState(toISO(new Date()));
@@ -38,8 +41,16 @@ export default function App() {
   };
   const update = (s: CycleSettings) => {
     store.commit('settings', s);
+    if (!periods.length) store.commit('periods', [{ start: s.lastPeriodStart }]);
+    else if (periods[periods.length - 1].start !== s.lastPeriodStart) {
+      store.commit('periods', periods.map((p, i) => (i === periods.length - 1 ? { ...p, start: s.lastPeriodStart } : p)));
+    }
     setTab('today');
   };
+  const avgP = settings?.periodLength ?? 5;
+  const onStart = (d: string) => store.commit('periods', startPeriod(periods, d, avgP));
+  const onEnd = (d: string) => store.commit('periods', endPeriod(periods, d));
+  const onRemove = (start: string) => store.commit('periods', removePeriod(periods, start));
   const todayFor = (m: Mode) =>
     intensity(settings!, phaseNow!.id, m, phaseNow!.dayInPhase, logged, hot, learned);
 
@@ -50,11 +61,11 @@ export default function App() {
     <div className="app">
       <main>
         {tab === 'today' && settings && phaseNow && (
-          <Today s={settings} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} logged={logged} learned={learned} cause={log[date]?.x} setCause={setCause} setFeeling={setFeeling} hot={hot} setHot={setHot} />
+          <Today s={settings} periods={periods} onStart={onStart} onEnd={onEnd} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} logged={logged} learned={learned} cause={log[date]?.x} setCause={setCause} setFeeling={setFeeling} hot={hot} setHot={setHot} />
         )}
         {tab === 'routine' && settings && phaseNow && <Routine workouts={store.docs.routine} onChange={(w) => store.commit('routine', w)} today={todayFor} phaseName={PHASES[phaseNow.id].name} feeling={feeling} />}
-        {tab === 'cycle' && settings && <CycleView s={settings} date={date} mode={mode} setMode={setMode} setDate={setDate} goToday={() => setTab('today')} log={log} hot={hot} learned={learned} />}
-        {tab === 'settings' && <Settings initial={settings} onSave={update} store={store} />}
+        {tab === 'cycle' && settings && <CycleView s={settings} periods={periods} onStart={onStart} onEnd={onEnd} onRemove={onRemove} date={date} mode={mode} setMode={setMode} setDate={setDate} goToday={() => setTab('today')} log={log} hot={hot} learned={learned} />}
+        {tab === 'settings' && <Settings initial={baseSettings} onSave={update} store={store} />}
       </main>
       <nav className="tabs">
         {([
@@ -98,7 +109,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 }
 
 function Today(p: {
-  s: CycleSettings; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void;
+  s: CycleSettings; periods: Period[]; onStart: (d: string) => void; onEnd: (d: string) => void; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void;
   feeling: Feeling; logged?: number; learned: Learned; cause?: Cause; setCause: (x: Cause | undefined) => void; setFeeling: (f: Feeling) => void; hot: boolean; setHot: (b: boolean) => void;
 }) {
   const day = cycleDay(p.s, p.date);
@@ -154,6 +165,8 @@ function Today(p: {
         )}
       </section>
 
+      <PeriodCard s={p.s} periods={p.periods} date={p.date} onStart={p.onStart} onEnd={p.onEnd} />
+
       <section className="card mindset"><h3>Mentalidad de hoy</h3><p>{g.mindset}</p></section>
 
       <section className="card">
@@ -207,7 +220,7 @@ function Calculator({ mode, pct }: { mode: Mode; pct: number }) {
   );
 }
 
-function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void; goToday: () => void; log: Log; hot: boolean; learned: Learned }) {
+function CycleView(p: { s: CycleSettings; periods: Period[]; onStart: (d: string) => void; onEnd: (d: string) => void; onRemove: (start: string) => void; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void; goToday: () => void; log: Log; hot: boolean; learned: Learned }) {
   const day = cycleDay(p.s, p.date);
   const days = Array.from({ length: p.s.cycleLength }, (_, i) => i + 1);
   const vals = days.map((d) => {
@@ -224,6 +237,8 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
   return (
     <div className="stack">
       <h2>Tu ciclo</h2>
+      <Calendar s={p.s} periods={p.periods} log={p.log} date={p.date} setDate={p.setDate} onStart={p.onStart} onEnd={p.onEnd} onRemove={p.onRemove} goToday={p.goToday} />
+      <CycleStats s={p.s} periods={p.periods} />
       <ModeSwitch mode={p.mode} setMode={p.setMode} />
       <section className="card">
         <h3>Objetivo por día (sin registrar sensación) · {MODE_LABEL[p.mode]}</h3>
@@ -309,7 +324,7 @@ function Settings({ initial, onSave, store }: { initial: CycleSettings | null; o
   return (
     <div className="stack">
       <h2>{initial ? 'Ajustes' : 'Bienvenidos a CicloFit'}</h2>
-      {!initial && <p className="muted">Introduce los datos del ciclo. Se guardan solo en este dispositivo.</p>}
+      {!initial && <p className="muted">Introduce los datos del ciclo. Después irás registrando cada regla (cuándo llega y cuándo se va) y la app aprenderá de tu ciclo.</p>}
       <section className="card">
         <label className="field"><span>Primer día de la última regla</span><input type="date" value={last} max={toISO(new Date())} onChange={(e) => setLast(e.target.value)} /></label>
         <label className="field"><span>Duración del ciclo (días)</span><input inputMode="numeric" value={cl} onChange={(e) => setCl(e.target.value)} /></label>
@@ -395,6 +410,116 @@ function Account({ store }: { store: ReturnType<typeof useStore> }) {
         <button className="ghost" onClick={store.syncAll}>Sincronizar ahora</button>
         <button className="ghost" onClick={store.signOut}>Cerrar sesión</button>
       </div>
+    </section>
+  );
+}
+
+const todayISO = () => toISO(new Date());
+const fmtShort = (iso: string) => fromISO(iso).toLocaleDateString('es-ES', { day: 'numeric', month: 'short' });
+
+function PeriodCard({ s, periods, date, onStart, onEnd }: { s: CycleSettings; periods: Period[]; date: string; onStart: (d: string) => void; onEnd: (d: string) => void }) {
+  const last = periods[periods.length - 1];
+  const open = last && !last.end && last.start <= date && daysSince({ ...s, lastPeriodStart: last.start }, date) <= 12;
+  const when = date === todayISO() ? 'hoy' : `el ${fmtShort(date)}`;
+  const late = isLate(s, date);
+  return (
+    <section className="card">
+      <h3>Tu regla</h3>
+      {open ? (
+        <>
+          <p className="small">En curso desde el {fmtShort(last.start)} (día {daysSince({ ...s, lastPeriodStart: last.start }, date) + 1}).</p>
+          <button className="primary" onClick={() => onEnd(date)}>Se me ha ido la regla {when}</button>
+        </>
+      ) : (
+        <>
+          {late && <p className="small muted">La regla se esperaba el {fmtShort(addDays(s.lastPeriodStart, s.cycleLength))}. Si ya te ha llegado, márcalo para que el ciclo se ajuste.</p>}
+          <button className="primary" onClick={() => onStart(date)}>Me ha llegado la regla {when}</button>
+        </>
+      )}
+    </section>
+  );
+}
+
+function Calendar(p: { s: CycleSettings; periods: Period[]; log: Log; date: string; setDate: (d: string) => void; onStart: (d: string) => void; onEnd: (d: string) => void; onRemove: (s: string) => void; goToday: () => void }) {
+  const [month, setMonth] = useState(p.date.slice(0, 7));
+  const today = todayISO();
+  const [y, m] = month.split('-').map(Number);
+  const first = new Date(y, m - 1, 1);
+  const lead = (first.getDay() + 6) % 7; // lunes primero
+  const dim = new Date(y, m, 0).getDate();
+  const cells: (string | null)[] = [...Array(lead).fill(null), ...Array.from({ length: dim }, (_, i) => toISO(new Date(y, m - 1, i + 1)))];
+  const real = useMemo(() => periodDays(p.periods, today, p.s.periodLength), [p.periods, p.s.periodLength, today]);
+  const pred = useMemo(() => {
+    const out = new Set<string>();
+    for (let k = 1; k <= 3; k++) {
+      const st = addDays(p.s.lastPeriodStart, k * p.s.cycleLength);
+      for (let i = 0; i < p.s.periodLength; i++) out.add(addDays(st, i));
+    }
+    return out;
+  }, [p.s]);
+  const shift = (n: number) => {
+    const d = new Date(y, m - 1 + n, 1);
+    setMonth(`${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`);
+  };
+  const title = first.toLocaleDateString('es-ES', { month: 'long', year: 'numeric' });
+  const day = cycleDay(p.s, p.date);
+  const ph = PHASES[phaseOf(p.s, day).id];
+  const inPeriod = p.periods.find((x) => x.start <= p.date && p.date <= (x.end ?? addDays(x.start, p.s.periodLength - 1)));
+  const energy = p.log[p.date]?.f;
+
+  return (
+    <section className="card">
+      <div className="cal-head">
+        <button aria-label="Mes anterior" onClick={() => shift(-1)}>‹</button>
+        <b className="cap">{title}</b>
+        <button aria-label="Mes siguiente" onClick={() => shift(1)}>›</button>
+      </div>
+      <div className="cal">
+        {['L', 'M', 'X', 'J', 'V', 'S', 'D'].map((d) => <span key={d} className="dow">{d}</span>)}
+        {cells.map((iso, i) => {
+          if (!iso) return <span key={i} />;
+          const e = p.log[iso]?.f;
+          const cls = ['day', real.has(iso) ? 'period' : pred.has(iso) ? 'pred' : '', iso === today ? 'today' : '', iso === p.date ? 'sel' : ''].join(' ');
+          return (
+            <button key={iso} className={cls} onClick={() => p.setDate(iso)}>
+              {Number(iso.slice(8))}
+              {e !== undefined && <i className="edot" style={{ background: e >= 8 ? '#4ade80' : e >= 5 ? '#ffb340' : '#ff5d6c' }} />}
+            </button>
+          );
+        })}
+      </div>
+      <div className="legend small muted"><span><i className="lg period" /> regla</span><span><i className="lg pred" /> prevista</span><span><i className="edot" style={{ background: '#4ade80' }} /> energía</span></div>
+      <div className="daycard">
+        <div><b className="cap">{fmtDate(p.date)}</b></div>
+        <div className="small muted">Día {day} · {ph.name}{energy !== undefined ? ` · energía ${energy}/10` : ''}</div>
+        <div className="row-btns wrap">
+          <button className="ghost" onClick={() => p.onStart(p.date)}>La regla empezó</button>
+          <button className="ghost" onClick={() => p.onEnd(p.date)}>La regla terminó</button>
+          {inPeriod && <button className="ghost danger" onClick={() => p.onRemove(inPeriod.start)}>Borrar esta regla</button>}
+          <button className="ghost" onClick={p.goToday}>Registrar energía</button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function CycleStats({ s, periods }: { s: CycleSettings; periods: Period[] }) {
+  const st = stats(periods);
+  const n = st.intervals.length;
+  const odd = st.intervals.some((d) => d < 21 || d > 38) || daysSince(s, todayISO()) > 45;
+  return (
+    <section className="card">
+      <h3>Tu ciclo aprendido</h3>
+      <p className="small">Usando <b>{s.cycleLength} días</b> de ciclo y <b>{s.periodLength} días</b> de regla.</p>
+      {n === 0 ? (
+        <p className="muted small">Registra cuándo te llega y cuándo se va la regla cada mes. Con cada ciclo, la app ajusta la duración de tu ciclo y de tu regla (usa tus datos más cuanto más registres).</p>
+      ) : (
+        <p className="muted small">
+          {n} {n === 1 ? 'ciclo registrado' : 'ciclos registrados'}: media {st.avgCycle!.toFixed(1).replace('.', ',')} días (de {st.minCycle} a {st.maxCycle}).
+          {st.avgPeriod ? ` Regla media ${st.avgPeriod.toFixed(1).replace('.', ',')} días.` : ' Marca también cuándo se va la regla para aprender su duración.'}
+        </p>
+      )}
+      {odd && <p className="watch small">Ciclos muy cortos, largos o ausentes pueden tener muchas causas, incluida comer poco para lo que entrenas. Si te ocurre, consúltalo con un profesional sanitario.</p>}
     </section>
   );
 }

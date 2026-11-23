@@ -22,7 +22,8 @@ p { margin: 0 0 8px; line-height: 1.5; }
 .hero { background: linear-gradient(160deg, color-mix(in srgb, var(--accent) 28%, var(--bg2)), var(--bg2) 70%); border: 1px solid var(--line); border-radius: 24px; padding: 16px; display: flex; flex-direction: column; align-items: center; gap: 12px; }
 .datebar { width: 100%; display: flex; align-items: center; justify-content: space-between; text-align: center; }
 .datebar button { width: 40px; height: 40px; border-radius: 50%; border: 1px solid var(--line); background: #ffffff10; color: var(--text); font-size: 22px; }
-.date { font-weight: 700; font-size: 18px; text-transform: capitalize; }
+.date { font-weight: 700; font-size: 18px; }
+.date::first-letter { text-transform: uppercase; }
 .phase-chip { display: inline-flex; align-items: center; gap: 8px; padding: 6px 14px; border-radius: 999px; background: #00000030; font-weight: 600; }
 .dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent); display: inline-block; }
 .ring { width: 210px; height: 210px; }
@@ -96,3 +97,24 @@ button:disabled { opacity: .5; }
 .scale-lbl { display: flex; justify-content: space-between; margin: 6px 0 8px; gap: 6px; }
 .cause { margin: 10px 0 6px; flex-wrap: wrap; overflow: visible; }
 .chip:disabled { opacity: .4; }
+.cal-head { display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px; }
+.cal-head button { width: 36px; height: 36px; border-radius: 50%; border: 1px solid var(--line); background: #ffffff10; color: var(--text); font-size: 20px; }
+.cal { display: grid; grid-template-columns: repeat(7, 1fr); gap: 4px; }
+.dow { text-align: center; font-size: 12px; color: var(--muted); padding: 4px 0; }
+.day { position: relative; height: 40px; border: 1px solid transparent; border-radius: 10px; background: #00000030; color: var(--text); font-size: 14px; padding: 0; }
+.day.period { background: #ff5d6c; color: #fff; font-weight: 700; }
+.day.pred { border: 1px dashed #ff5d6c; }
+.day.today { outline: 2px solid #fff; outline-offset: -2px; }
+.day.sel { box-shadow: 0 0 0 2px var(--accent); }
+.edot { position: absolute; bottom: 3px; left: 50%; width: 6px; height: 6px; margin-left: -3px; border-radius: 50%; display: inline-block; }
+.legend { display: flex; gap: 14px; margin-top: 8px; align-items: center; }
+.legend .edot { position: static; margin: 0 4px 0 0; }
+.lg { display: inline-block; width: 12px; height: 12px; border-radius: 4px; margin-right: 4px; vertical-align: -2px; }
+.lg.period { background: #ff5d6c; }
+.lg.pred { border: 1px dashed #ff5d6c; }
+.daycard { margin-top: 12px; padding-top: 12px; border-top: 1px solid var(--line); }
+.row-btns.wrap { flex-wrap: wrap; margin-top: 10px; }
+.row-btns.wrap .ghost { flex: 1 1 45%; padding: 10px; font-size: 14px; }
+.ghost.danger { color: #ff8a8a; }
+.cap { display: inline-block; }
+.cap::first-letter { text-transform: uppercase; }

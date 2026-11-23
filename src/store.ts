@@ -3,7 +3,8 @@ import type { Session } from '@supabase/supabase-js';
 import { CycleSettings } from './cycle';
 import { toScore } from './guidance';
 import type { Log } from './learn';
-import { Workout } from './routine';
+import { Workout } from './routineLogic';
+import type { Period } from './periods';
 import { DocKey, Row, cloudEnabled, getSpaceId, pullAll, pushDoc, sb, ts } from './cloud';
 
 export type { Log };
@@ -13,10 +14,12 @@ export interface Docs {
   settings: CycleSettings | null;
   routine: Workout[];
   log: Log;
+  periods: Period[];
 }
 export type Status = 'off' | 'local' | 'syncing' | 'ok' | 'error';
 
-const LS: Record<DocKey, string> = { settings: 'ciclofit.settings.v1', routine: 'ciclofit.routine.v1', log: 'ciclofit.log.v1' };
+const LS: Record<DocKey, string> = { settings: 'ciclofit.settings.v1', routine: 'ciclofit.routine.v1', log: 'ciclofit.log.v1', periods: 'ciclofit.periods.v1' };
+const DOCKEYS: DocKey[] = ['settings', 'routine', 'log', 'periods'];
 const META = 'ciclofit.meta.v1';
 const OWNER = 'ciclofit.owner.v1';
 const EPOCH1 = '1970-01-01T00:00:01.000Z'; // datos locales previos: pierden frente a la nube si ya existe
@@ -42,6 +45,7 @@ export function useStore() {
     settings: read<CycleSettings>(LS.settings),
     routine: read<Workout[]>(LS.routine) ?? [],
     log: normLog(read<Log>(LS.log)),
+    periods: read<Period[]>(LS.periods) ?? [],
   }));
   const docsRef = useRef(docs);
   docsRef.current = docs;
@@ -50,7 +54,7 @@ export function useStore() {
     (() => {
       const m = read<Partial<Record<DocKey, string>>>(META) ?? {};
       // migración: datos previos sin marca de tiempo
-      (['settings', 'routine', 'log'] as DocKey[]).forEach((k) => {
+      DOCKEYS.forEach((k) => {
         if (!m[k] && localStorage.getItem(LS[k])) m[k] = EPOCH1;
       });
       return m;
@@ -109,9 +113,10 @@ export function useStore() {
     try {
       setStatus('syncing');
       const rows = await pullAll(sp);
-      for (const key of ['settings', 'routine', 'log'] as DocKey[]) {
+      for (const key of DOCKEYS) {
         const remote = rows.find((r: Row) => r.key === key);
-        const localHas = key === 'settings' ? docsRef.current.settings !== null : key === 'routine' ? docsRef.current.routine.length > 0 : Object.keys(docsRef.current.log).length > 0;
+        const cur = docsRef.current[key] as unknown;
+        const localHas = cur === null ? false : Array.isArray(cur) ? cur.length > 0 : typeof cur === 'object' ? Object.keys(cur as object).length > 0 : Boolean(cur);
         const lt = ts(metaRef.current[key]);
         const rt = ts(remote?.updated_at);
         if (!remote) {
@@ -162,8 +167,8 @@ export function useStore() {
         if (owner && owner !== session.user.id) {
           (Object.values(LS) as string[]).concat(META).forEach((k) => localStorage.removeItem(k));
           metaRef.current = {};
-          setDocs({ settings: null, routine: [], log: {} });
-          docsRef.current = { settings: null, routine: [], log: {} };
+          setDocs({ settings: null, routine: [], log: {}, periods: [] });
+          docsRef.current = { settings: null, routine: [], log: {}, periods: [] };
         }
         try { localStorage.setItem(OWNER, session.user.id); } catch { /* sin almacenamiento */ }
         spaceRef.current = await getSpaceId();

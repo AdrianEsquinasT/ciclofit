@@ -7,7 +7,7 @@ export const sb: SupabaseClient | null = cloudEnabled
   ? createClient(SUPABASE_URL, SUPABASE_ANON_KEY, { auth: { persistSession: true, autoRefreshToken: true } })
   : null;
 
-export type DocKey = 'settings' | 'routine' | 'log';
+export type DocKey = 'settings' | 'routine' | 'log' | 'periods';
 export interface Row {
   space_id?: string;
   key: DocKey;

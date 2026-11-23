@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Exercise, Workout, adjust, fmt, uid } from './routine';
+import { Exercise, Workout, adjust, fmt, uid } from './routineLogic';
 import { Feeling, MODE_LABEL, Mode, Intensity } from './guidance';
 
 interface Props {
@@ -148,7 +148,7 @@ function ExerciseCard({ ex, mode, pct, progressDay, onEdit, onProgress }: { ex: 
           <div className="today-v">{line(a.sets, a.repsMin, a.repsMax, a.weight)}</div>
         </div>
       </div>
-      <div className="muted small">RIR objetivo: {a.rir}{a.note ? ` · ${a.note}` : ''}</div>
+      <div className="muted small">Esfuerzo: {a.rir} reps en reserva{a.note ? ` · ${a.note}` : ''}</div>
       {progressDay && (
         <button className="chip up" onClick={onProgress}>
           ✓ Logré el máximo de reps → subir {ex.weight > 0 ? `+${fmt(ex.inc)} kg` : '+1 rep'}
@@ -161,7 +161,7 @@ function ExerciseCard({ ex, mode, pct, progressDay, onEdit, onProgress }: { ex: 
 function ExerciseForm({ init, mode, onSave, onCancel, onDelete }: { init: Exercise; mode: Mode; onSave: (e: Exercise) => void; onCancel: () => void; onDelete?: () => void }) {
   const [f, setF] = useState({
     name: init.name, sets: String(init.sets), repsMin: String(init.repsMin), repsMax: String(init.repsMax),
-    weight: String(init.weight), inc: String(init.inc), unit: init.unit,
+    weight: String(init.weight), inc: String(init.inc), unit: init.unit, goal: (init.goal ?? 'auto') as string,
   });
   const [err, setErr] = useState('');
   const num = (s: string) => parseFloat(s.replace(',', '.'));
@@ -178,7 +178,7 @@ function ExerciseForm({ init, mode, onSave, onCancel, onDelete }: { init: Exerci
     if (!(lo >= 1 && hi >= lo)) return setErr('Reps: mínimo ≥ 1 y máximo ≥ mínimo.');
     if (!(weight >= 0)) return setErr('Peso: 0 o más.');
     if (!(inc > 0)) return setErr('El incremento debe ser mayor que 0.');
-    onSave({ id: init.id, name: f.name.trim(), sets, repsMin: lo, repsMax: hi, weight, inc, unit: f.unit });
+    onSave({ id: init.id, name: f.name.trim(), sets, repsMin: lo, repsMax: hi, weight, inc, unit: f.unit, ...(f.goal === 'auto' ? {} : { goal: f.goal as 'strength' | 'volume' }) });
   };
 
   return (
@@ -201,6 +201,13 @@ function ExerciseForm({ init, mode, onSave, onCancel, onDelete }: { init: Exerci
           </select>
         </label>
       </div>
+      <label className="field"><span>Objetivo del ejercicio</span>
+        <select value={f.goal} onChange={(e) => set('goal', e.target.value)}>
+          <option value="auto">Automático (≤5 reps = fuerza)</option>
+          <option value="strength">Fuerza: mantiene el peso, baja reps</option>
+          <option value="volume">Músculo: baja el peso, mantiene reps</option>
+        </select>
+      </label>
       {err && <p className="error">{err}</p>}
       <div className="row-btns">
         <button className="primary" onClick={submit}>Guardar</button>
