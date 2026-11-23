@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { CycleSettings, PhaseId, addDays, cycleDay, fromISO, phaseOf, phaseRanges, toISO } from './cycle';
-import { FEELING_LABEL, FEELING_SCORE, Feeling, MODE_LABEL, Mode, PHASES, SENS_LABEL, intensity } from './guidance';
+import { DEFAULT_FEELING, Feeling, MODE_LABEL, Mode, PHASES, SENS_LABEL, feelLabel, intensity } from './guidance';
 import Routine from './Routine';
 import { Log, Status, useStore } from './store';
 import { cloudEnabled } from './cloud';
@@ -20,7 +20,8 @@ export default function App() {
   const [hot, setHot] = useState(false);
   const [date, setDate] = useState(toISO(new Date()));
 
-  const feeling: Feeling = log[date]?.f ?? 'ok';
+  const logged = log[date]?.f;
+  const feeling: Feeling = logged ?? DEFAULT_FEELING;
   const phaseNow = settings ? phaseOf(settings, cycleDay(settings, date)) : null;
 
   const setFeeling = (f: Feeling) => {
@@ -41,7 +42,7 @@ export default function App() {
     <div className="app">
       <main>
         {tab === 'today' && settings && phaseNow && (
-          <Today s={settings} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} setFeeling={setFeeling} hot={hot} setHot={setHot} />
+          <Today s={settings} date={date} setDate={setDate} mode={mode} setMode={setMode} feeling={feeling} logged={logged} setFeeling={setFeeling} hot={hot} setHot={setHot} />
         )}
         {tab === 'routine' && settings && phaseNow && <Routine workouts={store.docs.routine} onChange={(w) => store.commit('routine', w)} today={todayFor} phaseName={PHASES[phaseNow.id].name} feeling={feeling} />}
         {tab === 'cycle' && settings && <CycleView s={settings} date={date} mode={mode} setMode={setMode} setDate={setDate} goToday={() => setTab('today')} log={log} hot={hot} />}
@@ -90,7 +91,7 @@ function Ring({ pct, color }: { pct: number; color: string }) {
 
 function Today(p: {
   s: CycleSettings; date: string; setDate: (d: string) => void; mode: Mode; setMode: (m: Mode) => void;
-  feeling: Feeling; setFeeling: (f: Feeling) => void; hot: boolean; setHot: (b: boolean) => void;
+  feeling: Feeling; logged?: number; setFeeling: (f: Feeling) => void; hot: boolean; setHot: (b: boolean) => void;
 }) {
   const day = cycleDay(p.s, p.date);
   const ph = phaseOf(p.s, day);
@@ -121,14 +122,15 @@ function Today(p: {
       </header>
 
       <section className="card">
-        <h3>¿Cómo te sientes hoy?</h3>
-        <div className="seg">
-          {(Object.keys(FEELING_LABEL) as Feeling[]).map((f) => (
-            <button key={f} className={p.feeling === f ? 'on' : ''} onClick={() => p.setFeeling(f)}>{FEELING_LABEL[f]}</button>
+        <h3>¿Cómo te sientes hoy? <span className="muted small">(1–10)</span></h3>
+        <div className="scale">
+          {Array.from({ length: 10 }, (_, k) => k + 1).map((n) => (
+            <button key={n} className={p.logged === n ? 'on' : ''} onClick={() => p.setFeeling(n)}>{n}</button>
           ))}
         </div>
+        <div className="scale-lbl muted small"><span>1 · fatal</span><span>{p.logged ? feelLabel(p.logged) : `sin registrar (se asume ${DEFAULT_FEELING})`}</span><span>10 · genial</span></div>
         <p className="muted small">
-          Es el factor que más pesa: la evidencia muestra que la fase explica poco y los síntomas explican más. Floja −5, Mal −10. Se guarda para ver tu patrón personal en “Ciclo”.
+          Es el factor que más pesa: la evidencia muestra que la fase explica poco y los síntomas explican más. De 8 a 10 no hay descuento; por debajo, baja progresivamente (hasta −10). Se guarda para ver tu patrón personal en “Ciclo”.
         </p>
         {p.mode === 'hyrox' && (
           <label className="check">
@@ -195,7 +197,7 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
   const days = Array.from({ length: p.s.cycleLength }, (_, i) => i + 1);
   const vals = days.map((d) => {
     const ph = phaseOf(p.s, d);
-    return intensity(p.s, ph.id, p.mode, ph.dayInPhase, 'ok', p.hot).point;
+    return intensity(p.s, ph.id, p.mode, ph.dayInPhase, DEFAULT_FEELING, p.hot).point;
   });
   const W = 340, H = 120, padX = 8, padY = 14, LO = 85;
   const x = (i: number) => padX + (i * (W - 2 * padX)) / (days.length - 1);
@@ -206,7 +208,7 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
 
   const stats = ranges.map((r) => {
     const entries = Object.values(p.log).filter((e) => e.p === r.id);
-    const avg = entries.length ? entries.reduce((a, e) => a + FEELING_SCORE[e.f], 0) / entries.length : null;
+    const avg = entries.length ? entries.reduce((a, e) => a + e.f, 0) / entries.length : null;
     return { id: r.id, n: entries.length, avg };
   });
 
@@ -215,7 +217,7 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
       <h2>Tu ciclo</h2>
       <ModeSwitch mode={p.mode} setMode={p.setMode} />
       <section className="card">
-        <h3>Objetivo por día (sensación “Normal”) · {MODE_LABEL[p.mode]}</h3>
+        <h3>Objetivo por día (sensación 8+) · {MODE_LABEL[p.mode]}</h3>
         <svg viewBox={`0 0 ${W} ${H}`} className="chart">
           {ranges.map((r) => (
             <rect key={r.id} x={x(r.start - 1) - 2} y="0" width={x(r.end - 1) - x(r.start - 1) + 4} height={H} fill={PHASES[r.id].color} opacity="0.14" />
@@ -237,7 +239,7 @@ function CycleView(p: { s: CycleSettings; date: string; setDate: (d: string) => 
             <div key={s.id} className="pat">
               <span className="dot" style={{ background: PHASES[s.id].color }} />
               <span className="pat-n">{PHASES[s.id].name}</span>
-              <div className="bar"><div style={{ width: `${s.avg === null ? 0 : (s.avg / 3) * 100}%`, background: PHASES[s.id].color }} /></div>
+              <div className="bar"><div style={{ width: `${s.avg === null ? 0 : (s.avg / 10) * 100}%`, background: PHASES[s.id].color }} /></div>
               <span className="muted small">{s.n} d</span>
             </div>
           ))

@@ -90,3 +90,7 @@ select { background: var(--bg); color: var(--text); border: 1px solid var(--line
 .splash { text-align: center; margin-top: 40vh; }
 .login { margin-top: 12vh; }
 button:disabled { opacity: .5; }
+.scale { display: grid; grid-template-columns: repeat(10, 1fr); gap: 4px; }
+.scale button { height: 38px; border: 1px solid var(--line); border-radius: 10px; background: #00000035; color: var(--muted); font-weight: 700; font-size: 15px; padding: 0; }
+.scale button.on { background: var(--accent); border-color: var(--accent); color: #fff; }
+.scale-lbl { display: flex; justify-content: space-between; margin: 6px 0 8px; gap: 6px; }

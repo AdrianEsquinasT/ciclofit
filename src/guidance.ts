@@ -1,7 +1,7 @@
 import { CycleSettings, PhaseId } from './cycle';
 
 export type Mode = 'strength' | 'hyrox';
-export type Feeling = 'great' | 'ok' | 'low' | 'bad';
+export type Feeling = number; // 1 (fatal) .. 10 (genial)
 
 export interface ModeGuide {
   prior: number; // puntos porcentuales respecto al pico (≤ 0): "prior" poblacional, pequeño
@@ -26,9 +26,16 @@ export interface PhaseInfo {
 }
 
 export const MODE_LABEL: Record<Mode, string> = { strength: 'Pesas', hyrox: 'Hyrox' };
-export const FEELING_LABEL: Record<Feeling, string> = { great: 'Genial', ok: 'Normal', low: 'Floja', bad: 'Mal' };
-export const FEELING_DELTA: Record<Feeling, number> = { great: 0, ok: 0, low: -5, bad: -10 };
-export const FEELING_SCORE: Record<Feeling, number> = { great: 3, ok: 2, low: 1, bad: 0 };
+export const DEFAULT_FEELING = 8; // si no se registra, se asume un día normal
+export const toScore = (f: unknown): number => {
+  if (typeof f === 'number' && f >= 1 && f <= 10) return Math.round(f);
+  const legacy: Record<string, number> = { great: 9, ok: 8, low: 5, bad: 2 }; // registros antiguos
+  return typeof f === 'string' && f in legacy ? legacy[f] : DEFAULT_FEELING;
+};
+/** 8-10: sin descuento. Por debajo, −1,5 puntos por cada punto de menos (máx. −10). */
+export const feelDelta = (s: number) => (s >= 8 ? 0 : -Math.min(10, Math.round((8 - s) * 1.5)));
+export const feelLabel = (s: number) =>
+  s >= 9 ? 'Genial' : s >= 8 ? 'Bien' : s >= 6 ? 'Normal-baja' : s >= 4 ? 'Floja' : 'Muy mal';
 
 export const SENS_LABEL = ['Ignorar fase', 'Estándar', 'Alta'];
 
@@ -209,7 +216,7 @@ export function intensity(
   if (dayInPhase <= 2 && g.firstDays) prior += g.firstDays;
   let phasePart = prior * sens;
   if (hot && g.heat && !s.hormonal) phasePart += g.heat;
-  const feelPart = FEELING_DELTA[feeling];
+  const feelPart = feelDelta(feeling);
   const point = Math.max(70, Math.min(100, Math.round(100 + phasePart + feelPart)));
   return { point, phasePart: Math.round(phasePart), feelPart };
 }

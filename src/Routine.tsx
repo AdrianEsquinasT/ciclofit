@@ -43,7 +43,7 @@ export default function Routine({ workouts, onChange, today, phaseName, feeling 
   }
 
   const it = today(sel.mode);
-  const progressDay = it.point >= 98 && (feeling === 'great' || feeling === 'ok');
+  const progressDay = it.point >= 98 && feeling >= 7;
 
   return (
     <div className="stack">

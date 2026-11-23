@@ -1,11 +1,13 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
 import type { Session } from '@supabase/supabase-js';
 import { CycleSettings, PhaseId } from './cycle';
-import { Feeling } from './guidance';
+import { Feeling, toScore } from './guidance';
 import { Workout } from './routine';
 import { DocKey, Row, cloudEnabled, getSpaceId, pullAll, pushDoc, sb, ts } from './cloud';
 
 export type Log = Record<string, { f: Feeling; p: PhaseId }>;
+const normLog = (raw: unknown): Log =>
+  Object.fromEntries(Object.entries((raw ?? {}) as Record<string, { f: unknown; p: PhaseId }>).map(([d, e]) => [d, { f: toScore(e.f), p: e.p }]));
 export interface Docs {
   settings: CycleSettings | null;
   routine: Workout[];
@@ -38,7 +40,7 @@ export function useStore() {
   const [docs, setDocs] = useState<Docs>(() => ({
     settings: read<CycleSettings>(LS.settings),
     routine: read<Workout[]>(LS.routine) ?? [],
-    log: read<Log>(LS.log) ?? {},
+    log: normLog(read<Log>(LS.log)),
   }));
   const docsRef = useRef(docs);
   docsRef.current = docs;
@@ -69,6 +71,7 @@ export function useStore() {
   }, []);
 
   const adopt = useCallback((key: DocKey, value: unknown, updated_at: string) => {
+    if (key === 'log') value = normLog(value);
     write(LS[key], value);
     metaRef.current = { ...metaRef.current, [key]: updated_at };
     write(META, metaRef.current);
@@ -115,7 +118,7 @@ export function useStore() {
         } else if (key === 'log') {
           // el registro se fusiona por día; gana el lado más reciente en caso de choque
           const local = docsRef.current.log;
-          const rv = remote.value as Log;
+          const rv = normLog(remote.value);
           const merged = rt >= lt ? { ...local, ...rv } : { ...rv, ...local };
           const changedLocal = JSON.stringify(merged) !== JSON.stringify(local);
           const changedRemote = JSON.stringify(merged) !== JSON.stringify(rv);
