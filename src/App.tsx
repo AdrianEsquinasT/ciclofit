@@ -371,11 +371,15 @@ function Login({ store }: { store: ReturnType<typeof useStore> }) {
     const u = user.trim().toLowerCase();
     const candidates = u.includes('@') ? [u] : LOGIN_DOMAINS.map((d) => `${u}@${d}`);
     let e = '';
+    let useful = ''; // primer error que no sea "credenciales incorrectas" (p. ej. correo sin confirmar)
     for (const c of candidates) {
       e = await store.signIn(c, pw);
       if (!e) break;
+      if (!useful && !/invalid login/i.test(e)) useful = e;
     }
-    setMsg(e ? (/invalid login/i.test(e) ? 'Usuario o contraseña incorrectos.' : e) : '');
+    if (e && useful) e = useful;
+    const txt = /email not confirmed/i.test(e) ? 'El correo de esta cuenta no está confirmado (confírmalo en Supabase → Authentication → Users).' : /invalid login/i.test(e) ? 'Usuario o contraseña incorrectos (si el correo tiene otro dominio, escribe el correo completo).' : e;
+    setMsg(e ? txt : '');
     setBusy(false);
   };
   return (
